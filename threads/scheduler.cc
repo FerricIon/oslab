@@ -122,6 +122,7 @@ void Scheduler::Run(Thread *nextThread)
     // point, we were still running on the old thread's stack!
     if (threadToBeDestroyed != NULL)
     {
+        tidTable[threadToBeDestroyed->getTid()] = NULL;
         delete threadToBeDestroyed;
         threadToBeDestroyed = NULL;
     }

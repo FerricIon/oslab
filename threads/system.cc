@@ -19,6 +19,10 @@ Statistics *stats;           // performance metrics
 Timer *timer;                // the hardware timer device,
                              // for invoking context switches
 
+// Mapping tid to conresponding Thread
+// NULL if no Thread taking the tid
+Thread *tidTable[MAX_THREADS];
+
 #ifdef FILESYS_NEEDED
 FileSystem *fileSystem;
 #endif
@@ -143,10 +147,17 @@ void Initialize(int argc, char **argv)
 
     threadToBeDestroyed = NULL;
 
+    // Explicitly clear the tidTable
+    for (int i = 0; i < MAX_THREADS; ++i)
+        tidTable[i] = NULL;
+
     // We didn't explicitly allocate the current thread we are running in.
     // But if it ever tries to give up the CPU, we better have a Thread
     // object to save its state.
     currentThread = new Thread("main");
+    // Allocate tid 0 for main thread, leaving as default
+    // currentThread->setTid(0);
+    tidTable[0] = currentThread;
     currentThread->setStatus(RUNNING);
 
     interrupt->Enable();
@@ -197,4 +208,31 @@ void Cleanup()
     delete interrupt;
 
     Exit(0);
+}
+
+//----------------------------------------------------------------------
+// AllocateTid
+//  Allocate a tid for the newly forked thread. If none available,
+//  returns -1.
+//----------------------------------------------------------------------
+int AllocateTid(Thread *thread)
+{
+    for (int i = 0; i < 128; ++i)
+        if (tidTable[i] == NULL)
+        {
+            tidTable[i] = thread;
+            return i;
+        }
+    return -1;
+}
+
+//----------------------------------------------------------------------
+// DeallocatedTid
+//  Deallocates a thread's tid when the thread finishes. Reset the
+//  tidTable for following ones.
+//----------------------------------------------------------------------
+void DeallocateTid(int tid)
+{
+    ASSERT(tid >= 0 && tid < MAX_THREADS && tidTable[tid] == currentThread);
+    tidTable[tid] = NULL;
 }

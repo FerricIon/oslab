@@ -20,8 +20,8 @@
 #include "synch.h"
 #include "system.h"
 
-#define STACK_FENCEPOST 0xdeadbeef // this is put at the top of the
-                                   // execution stack, for detecting
+#define STACK_FENCEPOST 0xdeadbeef // this is put at the top of the  \
+                                   // execution stack, for detecting \
                                    // stack overflows
 
 //----------------------------------------------------------------------
@@ -34,6 +34,8 @@
 
 Thread::Thread(char *threadName)
 {
+    tid = 0;
+    uid = 0;
     name = threadName;
     stackTop = NULL;
     stack = NULL;
@@ -89,6 +91,12 @@ void Thread::Fork(VoidFunctionPtr func, void *arg)
     DEBUG('t', "Forking thread \"%s\" with func = 0x%x, arg = %d\n",
           name, (int)func, (int *)arg);
 
+    // If no tid available, throw thread_exception
+    tid = AllocateTid(this);
+    if (tid == -1)
+        throw thread_exception();
+    // No user concepts now, leave as default
+    // uid = 0;
     StackAllocate(func, arg);
 
     IntStatus oldLevel = interrupt->SetLevel(IntOff);

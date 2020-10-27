@@ -16,11 +16,16 @@
 #include "stats.h"
 #include "timer.h"
 
+#define MAX_THREADS 128
+
 // Initialization and cleanup routines
 extern void Initialize(int argc, char **argv); // Initialization,
 											   // called before anything else
 extern void Cleanup();						   // Cleanup, called when
 											   // Nachos is done.
+extern int AllocateTid(Thread *thread);		   // Allocate a tid,
+											   // returning -1 if none available
+extern void DeallocateTid(int tid);			   // Deallocate a tid
 
 extern Thread *currentThread;		// the thread holding the CPU
 extern Thread *threadToBeDestroyed; // the thread that just finished
@@ -28,6 +33,8 @@ extern Scheduler *scheduler;		// the ready list
 extern Interrupt *interrupt;		// interrupt status
 extern Statistics *stats;			// performance metrics
 extern Timer *timer;				// the hardware alarm clock
+
+extern Thread *tidTable[];
 
 #ifdef USER_PROGRAM
 #include "machine.h"

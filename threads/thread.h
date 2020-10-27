@@ -40,6 +40,8 @@
 #include "copyright.h"
 #include "utility.h"
 
+#include <exception>
+
 #ifdef USER_PROGRAM
 #include "machine.h"
 #include "addrspace.h"
@@ -65,6 +67,16 @@ enum ThreadStatus
 
 // external function, dummy routine whose sole job is to call Thread::Print
 extern void ThreadPrint(int arg);
+
+// throw thread_exception when too many threads are forked at one time
+class thread_exception : public std::exception
+{
+public:
+  const char *what() const throw()
+  {
+    return "Thread count exceeded MAX_THREADS";
+  }
+};
 
 // The following class defines a "thread control block" -- which
 // represents a single thread of execution.
@@ -96,16 +108,21 @@ public:
 
   void Fork(VoidFunctionPtr func, void *arg); // Make thread run (*func)(arg)
   void Yield();                               // Relinquish the CPU if any
-      // other thread is runnable
-  void Sleep(); // Put the thread to sleep and
-      // relinquish the processor
-  void Finish(); // The thread is done executing
+                                              // other thread is runnable
+  void Sleep();                               // Put the thread to sleep and
+                                              // relinquish the processor
+  void Finish();                              // The thread is done executing
 
   void CheckOverflow(); // Check if thread has
-      // overflowed its stack
+                        // overflowed its stack
   void setStatus(ThreadStatus st) { status = st; }
   char *getName() { return (name); }
   void Print() { printf("%s, ", name); }
+
+  ThreadStatus getStatus() { return status; }
+  void setTid(int _tid) { tid = _tid; }
+  int getTid() { return tid; }
+  int getUid() { return uid; }
 
 private:
   // some of the private data for this class is listed above
@@ -115,6 +132,8 @@ private:
                        // (If NULL, don't deallocate stack)
   ThreadStatus status; // ready, running or blocked
   char *name;
+
+  int tid, uid; // required by lab1
 
   void StackAllocate(VoidFunctionPtr func, void *arg);
   // Allocate a stack for thread.
