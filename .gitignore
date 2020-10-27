@@ -1,0 +1,6 @@
+*/*.o
+nachos
+test/matmult
+test/shell
+test/sort
+test/halt
