@@ -54,6 +54,10 @@
 // WATCH OUT IF THIS ISN'T BIG ENOUGH!!!!!
 #define StackSize (4 * 1024) // in words
 
+// Max priority level, but threads with smallest priority will be
+// set to run first.
+#define MaxPriorityLevel 8
+
 // Thread state
 enum ThreadStatus
 {
@@ -86,11 +90,11 @@ private:
   void *machineState[MachineStateSize]; // all registers except for stackTop
 
 public:
-  Thread(char *debugName); // initialize a Thread
-  ~Thread();               // deallocate a Thread
-                           // NOTE -- thread being deleted
-                           // must not be running when delete
-                           // is called
+  Thread(char *debugName, int prio = MaxPriorityLevel); // initialize a Thread
+  ~Thread();                                            // deallocate a Thread
+                                                        // NOTE -- thread being deleted
+                                                        // must not be running when delete
+                                                        // is called
 
   // basic thread operations
 
@@ -107,6 +111,8 @@ public:
   char *getName() { return (name); }
   void Print() { printf("%s, ", name); }
 
+  int getPriority() { return (priority); }
+
 private:
   // some of the private data for this class is listed above
 
@@ -115,6 +121,8 @@ private:
                        // (If NULL, don't deallocate stack)
   ThreadStatus status; // ready, running or blocked
   char *name;
+
+  int priority;
 
   void StackAllocate(VoidFunctionPtr func, void *arg);
   // Allocate a stack for thread.

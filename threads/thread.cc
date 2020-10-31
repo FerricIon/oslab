@@ -32,12 +32,14 @@
 //	"threadName" is an arbitrary string, useful for debugging.
 //----------------------------------------------------------------------
 
-Thread::Thread(char *threadName)
+Thread::Thread(char *threadName, int prio)
 {
     name = threadName;
     stackTop = NULL;
     stack = NULL;
     status = JUST_CREATED;
+
+    priority = prio > MaxPriorityLevel ? MaxPriorityLevel : (prio < 0 ? 0 : prio);
 #ifdef USER_PROGRAM
     space = NULL;
 #endif
@@ -95,6 +97,8 @@ void Thread::Fork(VoidFunctionPtr func, void *arg)
     scheduler->ReadyToRun(this); // ReadyToRun assumes that interrupts
                                  // are disabled!
     (void)interrupt->SetLevel(oldLevel);
+
+    currentThread->Yield(); // Be preemptive
 }
 
 //----------------------------------------------------------------------
@@ -177,12 +181,9 @@ void Thread::Yield()
 
     DEBUG('t', "Yielding thread \"%s\"\n", getName());
 
-    nextThread = scheduler->FindNextToRun();
-    if (nextThread != NULL)
-    {
-        scheduler->ReadyToRun(this);
-        scheduler->Run(nextThread);
-    }
+    scheduler->ReadyToRun(this);
+    scheduler->Run(scheduler->FindNextToRun());
+
     (void)interrupt->SetLevel(oldLevel);
 }
 

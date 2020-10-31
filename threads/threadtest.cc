@@ -53,6 +53,88 @@ void ThreadTest1()
 }
 
 //----------------------------------------------------------------------
+// SimpleThread2
+// 	Loop 5 times, yielding the CPU to another ready thread
+//	each iteration.
+//----------------------------------------------------------------------
+
+void SimpleThread2(int)
+{
+    int num;
+
+    for (num = 0; num < 5; num++)
+    {
+        printf("*** thread with priority %d looped %d times\n", currentThread->getPriority(), num);
+        currentThread->Yield();
+    }
+}
+
+//----------------------------------------------------------------------
+// SimpleThread3
+// 	Loop 5 times, yielding the CPU to another ready thread
+//	each iteration. Fork a new thread with some priority on
+//  loop 3.
+//----------------------------------------------------------------------
+
+void SimpleThread3(int)
+{
+    int num;
+
+    for (num = 0; num < 5; num++)
+    {
+        printf("*** thread with priority %d looped %d times\n", currentThread->getPriority(), num);
+
+        if (num == 2)
+        {
+            Thread *t = new Thread("forked thread 2", MaxPriorityLevel - currentThread->getPriority());
+            t->Fork(SimpleThread2, 0);
+        }
+
+        currentThread->Yield();
+    }
+}
+
+//----------------------------------------------------------------------
+// ThreadTest2
+//  Fork more threads with different priority to call SimpleThread,
+//  while scheduler should be preemptive.
+//----------------------------------------------------------------------
+void ThreadTest2()
+{
+    DEBUG('t', "Entering ThreadTest2");
+
+    int num;
+
+    printf("### fork thread with smaller priority first\n\n");
+    for (num = 0; num < 5; num++)
+    {
+        printf("*** thread with priority %d looped %d times\n", currentThread->getPriority(), num);
+
+        if (num == 2)
+        {
+            Thread *t = new Thread("forked thread 1", 2);
+            t->Fork(SimpleThread3, 0);
+        }
+
+        currentThread->Yield();
+    }
+
+    printf("\n### fork thread with bigger priority first\n\n");
+    for (num = 0; num < 5; num++)
+    {
+        printf("*** thread with priority %d looped %d times\n", currentThread->getPriority(), num);
+
+        if (num == 2)
+        {
+            Thread *t = new Thread("forked thread 1", 6);
+            t->Fork(SimpleThread3, 0);
+        }
+
+        currentThread->Yield();
+    }
+}
+
+//----------------------------------------------------------------------
 // ThreadTest
 // 	Invoke a test routine.
 //----------------------------------------------------------------------
@@ -63,6 +145,9 @@ void ThreadTest()
     {
     case 1:
         ThreadTest1();
+        break;
+    case 2:
+        ThreadTest2();
         break;
     default:
         printf("No test specified.\n");
