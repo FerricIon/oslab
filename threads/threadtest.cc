@@ -135,6 +135,43 @@ void ThreadTest2()
 }
 
 //----------------------------------------------------------------------
+// SimpleThread4
+//  Just a loop for a while. Threads under kernel mode won't trigger
+//  timer interrupt - we don't count instructions. Calling
+//  instruction->OneTick() manually to simulate a thread under user
+//  mode.
+//
+//  which indicates the thread as always
+//----------------------------------------------------------------------
+
+void SimpleThread4(int which)
+{
+    int num;
+
+    for (num = 0; num < 10; num++)
+    {
+        printf("***in thread %d: num=%d, totalTicks=%d\n", which, num, stats->totalTicks);
+        interrupt->OneTick();
+    }
+}
+
+//----------------------------------------------------------------------
+// ThreadTest3
+//  Fork a thread running SimpleThread4, should do context switching
+//  automatically when a time slice is consumed.
+//----------------------------------------------------------------------
+
+void ThreadTest3()
+{
+    DEBUG('t', "Entering ThreadTest3");
+
+    Thread *t = new Thread("forked thread");
+    t->Fork(SimpleThread4, (void *)1);
+
+    SimpleThread4(0);
+}
+
+//----------------------------------------------------------------------
 // ThreadTest
 // 	Invoke a test routine.
 //----------------------------------------------------------------------
@@ -148,6 +185,9 @@ void ThreadTest()
         break;
     case 2:
         ThreadTest2();
+        break;
+    case 3:
+        ThreadTest3();
         break;
     default:
         printf("No test specified.\n");

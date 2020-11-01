@@ -138,8 +138,10 @@ void Initialize(int argc, char **argv)
     stats = new Statistics();    // collect statistics
     interrupt = new Interrupt;   // start up interrupt handling
     scheduler = new Scheduler(); // initialize the ready queue
-    if (randomYield)             // start the timer (if needed)
-        timer = new Timer(TimerInterruptHandler, 0, randomYield);
+
+    // Always set up the timer due to lab 2 challenge 1
+    // if (randomYield)             // start the timer (if needed)
+    timer = new Timer(TimerInterruptHandler, 0, randomYield);
 
     threadToBeDestroyed = NULL;
 
