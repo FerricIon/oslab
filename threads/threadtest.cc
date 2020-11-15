@@ -237,6 +237,86 @@ void ThreadTest3()
 }
 
 //----------------------------------------------------------------------
+// ConditionBarrier
+//  Shared data structure between threads - using Condition Variable.
+//  Thread size should be 4 in the following test.
+//----------------------------------------------------------------------
+
+struct ConditionBarrier
+{
+    Condition *condition;
+    Lock *lock;
+
+    unsigned size;
+    unsigned reached;
+};
+
+//----------------------------------------------------------------------
+// SimpleThread2
+//  Loop 5 times, while pusing forward the system clock by manually enabling
+//  and disabling interrupts. A thread should wait at the barrier until
+//  all threads have reached the barrier.
+//----------------------------------------------------------------------
+
+void SimpleThread2(int p)
+{
+    ConditionBarrier *barrier = (ConditionBarrier *)p;
+    for (int i = 0; i < 5; ++i)
+    {
+        IntStatus oldLevel;
+        oldLevel = interrupt->SetLevel(IntOff);
+        interrupt->SetLevel(oldLevel);
+        oldLevel = interrupt->SetLevel(IntOff);
+        interrupt->SetLevel(oldLevel);
+        oldLevel = interrupt->SetLevel(IntOff);
+        printf("### %s loop %d\n", currentThread->getName(), i);
+        interrupt->SetLevel(oldLevel);
+        oldLevel = interrupt->SetLevel(IntOff);
+        interrupt->SetLevel(oldLevel);
+        oldLevel = interrupt->SetLevel(IntOff);
+        interrupt->SetLevel(oldLevel);
+    }
+    barrier->lock->Acquire();
+    ++barrier->reached;
+    barrier->condition->Broadcast(barrier->lock);
+
+    while (barrier->reached < barrier->size)
+    {
+        printf("  * %s is blocked by the barrier...\n", currentThread->getName());
+        barrier->condition->Wait(barrier->lock);
+    }
+    barrier->lock->Release();
+    printf("*** %s passed the barrier\n", currentThread->getName());
+}
+
+//----------------------------------------------------------------------
+// ThreadTest4
+//  Create a shared buffer and 4 threads running SimpleThread2.
+//  Should be tested with -rs option, yielding random interrupts.
+//----------------------------------------------------------------------
+
+void ThreadTest4()
+{
+    DEBUG('t', "Entering ThreadTest4");
+
+    Thread *thread_1 = new Thread("thread1");
+    Thread *thread_2 = new Thread("thread2");
+    Thread *thread_3 = new Thread("thread3");
+    Thread *thread_4 = new Thread("thread4");
+
+    ConditionBarrier *barrier = new ConditionBarrier;
+    barrier->condition = new Condition("condition");
+    barrier->lock = new Lock("lock");
+    barrier->size = 4;
+    barrier->reached = 0;
+
+    thread_1->Fork(SimpleThread2, barrier);
+    thread_2->Fork(SimpleThread2, barrier);
+    thread_3->Fork(SimpleThread2, barrier);
+    thread_4->Fork(SimpleThread2, barrier);
+}
+
+//----------------------------------------------------------------------
 // ThreadTest
 // 	Invoke a test routine.
 //----------------------------------------------------------------------
@@ -253,6 +333,9 @@ void ThreadTest()
         break;
     case 3:
         ThreadTest3();
+        break;
+    case 4:
+        ThreadTest4();
         break;
     default:
         printf("No test specified.\n");
