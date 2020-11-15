@@ -96,16 +96,79 @@ void Semaphore::V()
     (void)interrupt->SetLevel(oldLevel);
 }
 
-// Dummy functions -- so we can compile our later assignments
-// Note -- without a correct implementation of Condition::Wait(),
-// the test case in the network assignment won't work!
-Lock::Lock(char *debugName) {}
-Lock::~Lock() {}
-void Lock::Acquire() {}
-void Lock::Release() {}
+Lock::Lock(char *debugName)
+{
+    name = debugName;
+    thread = NULL;
+    semaphore = new Semaphore("lock semaphore", 1);
+}
+Lock::~Lock()
+{
+    delete semaphore;
+}
+void Lock::Acquire()
+{
+    semaphore->P();
+    thread = currentThread;
+}
+void Lock::Release()
+{
+    ASSERT(isHeldByCurrentThread());
 
-Condition::Condition(char *debugName) {}
-Condition::~Condition() {}
-void Condition::Wait(Lock *conditionLock) { ASSERT(FALSE); }
-void Condition::Signal(Lock *conditionLock) {}
-void Condition::Broadcast(Lock *conditionLock) {}
+    thread = NULL;
+    semaphore->V();
+}
+bool Lock::isHeldByCurrentThread()
+{
+    bool isHolding;
+    IntStatus oldLevel = interrupt->SetLevel(IntOff);
+
+    isHolding = (thread == currentThread);
+    interrupt->SetLevel(oldLevel);
+
+    return isHolding;
+}
+
+Condition::Condition(char *debugName)
+{
+    name = debugName;
+    queue = new List;
+}
+Condition::~Condition()
+{
+    delete queue;
+}
+void Condition::Wait(Lock *conditionLock)
+{
+    ASSERT(conditionLock->isHeldByCurrentThread());
+
+    IntStatus oldLevel = interrupt->SetLevel(IntOff);
+    conditionLock->Release();
+
+    queue->Append((void *)currentThread);
+    currentThread->Sleep();
+
+    conditionLock->Acquire();
+    (void)interrupt->SetLevel(IntOn);
+}
+void Condition::Signal(Lock *conditionLock)
+{
+    ASSERT(conditionLock->isHeldByCurrentThread());
+    Thread *thread;
+
+    thread = (Thread *)queue->Remove();
+    if (thread != NULL)
+        scheduler->ReadyToRun(thread);
+}
+void Condition::Broadcast(Lock *conditionLock)
+{
+    ASSERT(conditionLock->isHeldByCurrentThread());
+    Thread *thread;
+
+    thread = (Thread *)queue->Remove();
+    while (thread != NULL)
+    {
+        scheduler->ReadyToRun(thread);
+        thread = (Thread *)queue->Remove();
+    }
+}
