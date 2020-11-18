@@ -317,6 +317,144 @@ void ThreadTest4()
 }
 
 //----------------------------------------------------------------------
+// ReadWriteLock
+//  A lock based on Lock, providing interfaces for reading and writing
+//  processes. There could only be one process writing or some
+//  processes reading at a single time point.
+//----------------------------------------------------------------------
+
+struct ReadWriteLock
+{
+    unsigned reading;
+    Semaphore *semaphore;
+    Lock *mutex;
+
+    ReadWriteLock()
+    {
+        reading = 0;
+        semaphore = new Semaphore("read write lock semaphore", 1);
+        mutex = new Lock("read write lock mutex");
+    }
+    ~ReadWriteLock()
+    {
+        delete semaphore;
+        delete mutex;
+    }
+    void AcquireRead()
+    {
+        mutex->Acquire();
+        if (reading == 0)
+        {
+            semaphore->P();
+        }
+        ++reading;
+        printf("### %s starts reading... %d reading\n", currentThread->getName(), reading);
+        mutex->Release();
+    }
+    void ReleaseRead()
+    {
+        mutex->Acquire();
+        --reading;
+        printf("### %s stops reading... %d reading\n", currentThread->getName(), reading);
+        if (reading == 0)
+        {
+            semaphore->V();
+        }
+        mutex->Release();
+    }
+    void AcquireWrite()
+    {
+        semaphore->P();
+        printf("*** %s starts writing... %d reading\n", currentThread->getName(), reading);
+    }
+    void ReleaseWrite()
+    {
+        printf("*** %s stops writing... %d reading\n", currentThread->getName(), reading);
+        semaphore->V();
+    }
+};
+
+//----------------------------------------------------------------------
+// Reader
+//  Reader processes for testing ReadWriteLock
+//----------------------------------------------------------------------
+
+void Reader(int p)
+{
+    ReadWriteLock *lock = (ReadWriteLock *)p;
+    for (int i = 0; i < 5; ++i)
+    {
+        lock->AcquireRead();
+
+        IntStatus oldLevel;
+        oldLevel = interrupt->SetLevel(IntOff);
+        interrupt->SetLevel(oldLevel);
+        oldLevel = interrupt->SetLevel(IntOff);
+        interrupt->SetLevel(oldLevel);
+        oldLevel = interrupt->SetLevel(IntOff);
+        interrupt->SetLevel(oldLevel);
+        oldLevel = interrupt->SetLevel(IntOff);
+        interrupt->SetLevel(oldLevel);
+
+        lock->ReleaseRead();
+    }
+}
+
+//----------------------------------------------------------------------
+// Writer
+//  Writer processes for testing ReadWriteLock
+//----------------------------------------------------------------------
+
+void Writer(int p)
+{
+    ReadWriteLock *lock = (ReadWriteLock *)p;
+    for (int i = 0; i < 5; ++i)
+    {
+        lock->AcquireWrite();
+
+        IntStatus oldLevel;
+        oldLevel = interrupt->SetLevel(IntOff);
+        interrupt->SetLevel(oldLevel);
+        oldLevel = interrupt->SetLevel(IntOff);
+        interrupt->SetLevel(oldLevel);
+        oldLevel = interrupt->SetLevel(IntOff);
+        interrupt->SetLevel(oldLevel);
+        oldLevel = interrupt->SetLevel(IntOff);
+        interrupt->SetLevel(oldLevel);
+
+        lock->ReleaseWrite();
+    }
+}
+
+//----------------------------------------------------------------------
+// ThreadTest5
+//  Create 4 reading processes and 2 reading ones which run
+//  simultaneously. Reading processes could be able to run
+//  concurrently, while a writing process should monopolize the CPU.
+//----------------------------------------------------------------------
+
+void ThreadTest5()
+{
+    DEBUG('t', "Entering ThreadTest4");
+
+    Thread *reader_t_1 = new Thread("reader1");
+    Thread *reader_t_2 = new Thread("reader2");
+    Thread *reader_t_3 = new Thread("reader3");
+    Thread *reader_t_4 = new Thread("reader4");
+    Thread *writer_t_1 = new Thread("writer1");
+    Thread *writer_t_2 = new Thread("writer2");
+
+    ReadWriteLock *lock = new ReadWriteLock;
+
+    reader_t_1->Fork(Reader, lock);
+    reader_t_2->Fork(Reader, lock);
+    reader_t_3->Fork(Reader, lock);
+    reader_t_4->Fork(Reader, lock);
+    writer_t_1->Fork(Writer, lock);
+    writer_t_2->Fork(Writer, lock);
+}
+
+//----------------------------------------------------------------------
 // ThreadTest
 // 	Invoke a test routine.
 //----------------------------------------------------------------------
@@ -336,6 +474,9 @@ void ThreadTest()
         break;
     case 4:
         ThreadTest4();
+        break;
+    case 5:
+        ThreadTest5();
         break;
     default:
         printf("No test specified.\n");
