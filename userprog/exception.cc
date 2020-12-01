@@ -57,6 +57,11 @@ void ExceptionHandler(ExceptionType which)
         DEBUG('a', "Shutdown, initiated by user program.\n");
         interrupt->Halt();
     }
+    else if (which == PageFaultException)
+    {
+        DEBUG('a', "Page fault, badVAddr: %d.\n", machine->registers[BadVAddrReg]);
+        // Handle page fault here.
+    }
     else
     {
         printf("Unexpected user mode exception %d %d\n", which, type);
