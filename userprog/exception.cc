@@ -52,16 +52,60 @@ void ExceptionHandler(ExceptionType which)
 {
     int type = machine->ReadRegister(2);
 
-    if ((which == SyscallException) && (type == SC_Halt))
+    if (which == SyscallException)
     {
-        DEBUG('a', "Shutdown, initiated by user program.\n");
-        interrupt->Halt();
+        if (type == SC_Halt)
+        {
+            DEBUG('a', "Shutdown, initiated by user program.\n");
+            interrupt->Halt();
+        }
+        else if (type == SC_Exit)
+        {
+            printf("%s exit with code %d.\n", currentThread->getName(), machine->ReadRegister(4));
+            currentThread->Finish();
+        }
+        else
+        {
+            printf("Unexpected syscall %d\n", type);
+            ASSERT(FALSE);
+        }
     }
+#ifdef USE_TLB
     else if (which == PageFaultException)
     {
         DEBUG('a', "Page fault, badVAddr: %d.\n", machine->registers[BadVAddrReg]);
-        // Handle page fault here.
+        static int pagefaultCounter;
+        printf("PageFault #%d, bad virtual addr: 0x%x\n",
+               ++pagefaultCounter, machine->registers[BadVAddrReg]);
+
+        unsigned int virtAddr = machine->registers[BadVAddrReg];
+        unsigned int vpn = (unsigned)virtAddr / PageSize;
+
+        unsigned int index = 0;
+
+#ifdef TLB_FIFO
+        static int lastIndex = TLBSize - 1;
+        lastIndex = index = (lastIndex + 1) % TLBSize;
+#elif defined(TLB_AGING)
+        index = currentThread->space->TlbIndex();
+#else
+        ASSERT(FALSE);
+#endif
+
+        // Set the dirty bit as well
+        TranslationEntry *entry = currentThread->space->LookupPageTable(
+            vpn, &machine->tlb[index]);
+        if (entry)
+        {
+            machine->tlb[index] = *entry;
+        }
+        else
+        {
+            printf("Unexpected virtual address 0x%x\n", virtAddr);
+            ASSERT(FALSE);
+        }
     }
+#endif
     else
     {
         printf("Unexpected user mode exception %d %d\n", which, type);

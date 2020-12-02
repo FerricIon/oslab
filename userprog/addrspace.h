@@ -32,9 +32,17 @@ public:
   void SaveState();    // Save/restore address space-specific
   void RestoreState(); // info on a context switch
 
+  TranslationEntry *LookupPageTable(
+      int vpn, TranslationEntry *pte = NULL); // Lookup an entry in the
+                                              // thread saving page table
+  void UpdateTlbCounter();                    // Called when handling a TimerInt
+  int TlbIndex();                             // Get the index with minimal
+                                              // counter value and set to 0xFF
+
 private:
-  TranslationEntry *pageTable; // Assume linear page table translation
-                               // for now!
+  TranslationEntry *tlb;
+  unsigned char *tlbCounter;
+  TranslationEntry *pageTable; // Thread saving when using tlb
   unsigned int numPages;       // Number of pages in the virtual
                                // address space
 };

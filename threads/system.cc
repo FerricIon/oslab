@@ -60,6 +60,9 @@ TimerInterruptHandler(int dummy)
 {
     if (interrupt->getStatus() != IdleMode)
         interrupt->YieldOnReturn();
+#ifdef USER_PROGRAM
+    currentThread->space->UpdateTlbCounter();
+#endif
 }
 
 //----------------------------------------------------------------------

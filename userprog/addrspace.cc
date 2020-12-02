@@ -97,6 +97,15 @@ AddrSpace::AddrSpace(OpenFile *executable)
                                        // a separate page, we could set its
                                        // pages to be read-only
     }
+#ifdef USE_TLB
+    tlb = new TranslationEntry[TLBSize];
+    tlbCounter = new unsigned char[TLBSize];
+    for (i = 0; i < TLBSize; ++i)
+    {
+        tlb[i].valid = FALSE;
+        tlbCounter[i] = 0;
+    }
+#endif
 
     // zero out the entire address space, to zero the unitialized data segment
     // and the stack segment
@@ -170,6 +179,9 @@ void AddrSpace::InitRegisters()
 
 void AddrSpace::SaveState()
 {
+#ifdef USE_TLB
+    memcpy(tlb, machine->tlb, sizeof(TranslationEntry) * TLBSize);
+#endif
 }
 
 //----------------------------------------------------------------------
@@ -182,6 +194,58 @@ void AddrSpace::SaveState()
 
 void AddrSpace::RestoreState()
 {
+#ifdef USE_TLB
+    memcpy(machine->tlb, tlb, sizeof(TranslationEntry) * TLBSize);
+#else
     machine->pageTable = pageTable;
     machine->pageTableSize = numPages;
+#endif
+}
+
+//----------------------------------------------------------------------
+// AddrSpace::LookupPageTable
+//  A thread saves its page table in the addr space if tlb is used.
+//  Lookup the entry when tlb missing using vpn. Set the dirty bit
+//  when changing out.
+//----------------------------------------------------------------------
+
+TranslationEntry *AddrSpace::LookupPageTable(int vpn, TranslationEntry *pte)
+{
+    if (vpn < 0 || vpn >= numPages)
+        return NULL;
+    if (pte != NULL && pte->valid)
+        pageTable[pte->virtualPage].dirty = pte->dirty;
+    return pageTable + vpn;
+}
+
+//----------------------------------------------------------------------
+// AddrSpace::UpdateTlbCounter
+//  Used by aging algorithm. Should be updated on timer interrupts.
+//----------------------------------------------------------------------
+
+void AddrSpace::UpdateTlbCounter()
+{
+    for (int i = 0; i < TLBSize; ++i)
+    {
+        tlbCounter[i] = ((unsigned char)machine->tlb[i].use << 7) |
+                        (tlbCounter[i] >> 1);
+        machine->tlb[i].use = FALSE;
+    }
+}
+
+//----------------------------------------------------------------------
+// AddrSpace::TlbIndex
+//  Find the index with the smallest counter whose PTE should be
+//  changed out. Set the counter to 0xFF for the newer coming PTE
+//  in case of thrashing.
+//----------------------------------------------------------------------
+
+int AddrSpace::TlbIndex()
+{
+    int index = 0;
+    for (int i = 0; i < TLBSize; ++i)
+        if (tlbCounter[i] < tlbCounter[index])
+            index = i;
+    tlbCounter[index] = 0xFF;
+    return index;
 }
