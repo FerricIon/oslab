@@ -45,6 +45,9 @@ private:
   TranslationEntry *pageTable; // Thread saving when using tlb
   unsigned int numPages;       // Number of pages in the virtual
                                // address space
+
+  void ManualReadTranslation(OpenFile *executable,
+                             int virtAddr, int size, int fileAddr);
 };
 
 #endif // ADDRSPACE_H

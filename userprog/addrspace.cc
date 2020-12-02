@@ -81,6 +81,11 @@ AddrSpace::AddrSpace(OpenFile *executable)
                                       // to run anything too big --
                                       // at least until we have
                                       // virtual memory
+    if (numPages > allocator->Available())
+    {
+        printf("No enough empty pages...\n");
+        ASSERT(FALSE);
+    }
 
     DEBUG('a', "Initializing address space, num pages %d, size %d\n",
           numPages, size);
@@ -89,13 +94,17 @@ AddrSpace::AddrSpace(OpenFile *executable)
     for (i = 0; i < numPages; i++)
     {
         pageTable[i].virtualPage = i; // for now, virtual page # = phys page #
-        pageTable[i].physicalPage = i;
+        pageTable[i].physicalPage = allocator->AllocPage();
         pageTable[i].valid = TRUE;
         pageTable[i].use = FALSE;
         pageTable[i].dirty = FALSE;
         pageTable[i].readOnly = FALSE; // if the code segment was entirely on
                                        // a separate page, we could set its
                                        // pages to be read-only
+        // zero out the entire address space, to zero the unitialized data segment
+        // and the stack segment
+        bzero(&machine->mainMemory[pageTable[i].physicalPage * PageSize],
+              PageSize);
     }
 #ifdef USE_TLB
     tlb = new TranslationEntry[TLBSize];
@@ -107,34 +116,34 @@ AddrSpace::AddrSpace(OpenFile *executable)
     }
 #endif
 
-    // zero out the entire address space, to zero the unitialized data segment
-    // and the stack segment
-    bzero(machine->mainMemory, size);
-
     // then, copy in the code and data segments into memory
     if (noffH.code.size > 0)
     {
         DEBUG('a', "Initializing code segment, at 0x%x, size %d\n",
               noffH.code.virtualAddr, noffH.code.size);
-        executable->ReadAt(&(machine->mainMemory[noffH.code.virtualAddr]),
-                           noffH.code.size, noffH.code.inFileAddr);
+        ManualReadTranslation(executable, noffH.code.virtualAddr,
+                              noffH.code.size, noffH.code.inFileAddr);
     }
     if (noffH.initData.size > 0)
     {
         DEBUG('a', "Initializing data segment, at 0x%x, size %d\n",
               noffH.initData.virtualAddr, noffH.initData.size);
-        executable->ReadAt(&(machine->mainMemory[noffH.initData.virtualAddr]),
-                           noffH.initData.size, noffH.initData.inFileAddr);
+        ManualReadTranslation(executable, noffH.initData.virtualAddr,
+                              noffH.initData.size, noffH.initData.inFileAddr);
     }
 }
 
 //----------------------------------------------------------------------
 // AddrSpace::~AddrSpace
-// 	Dealloate an address space.  Nothing for now!
+// 	Dealloate an address space.
 //----------------------------------------------------------------------
 
 AddrSpace::~AddrSpace()
 {
+    for (int i = 0; i < numPages; ++i)
+    {
+        allocator->FreePage(pageTable[i].physicalPage);
+    }
     delete pageTable;
 }
 
@@ -248,4 +257,30 @@ int AddrSpace::TlbIndex()
             index = i;
     tlbCounter[index] = 0xFF;
     return index;
+}
+
+//----------------------------------------------------------------------
+// AddrSpace::ManualReadTranslation
+//  Used for copying executable file data into main memory. translate
+//  cannot be called here, so manual handling is needed. Copy the data
+//  one page by one page to ensure continuity in virtual memory.
+//----------------------------------------------------------------------
+
+void AddrSpace::ManualReadTranslation(
+    OpenFile *executable, int virtAddr, int size, int fileAddr)
+{
+    int addr, lengthToRead;
+
+    for (addr = virtAddr; size != 0;)
+    {
+        int vpn = virtAddr / PageSize;
+        int ppn = pageTable[vpn].physicalPage;
+        int offset = virtAddr - vpn * PageSize;
+        lengthToRead = min(size, PageSize - offset);
+        executable->ReadAt(&(machine->mainMemory[ppn * PageSize + offset]),
+                           lengthToRead, fileAddr);
+        virtAddr += lengthToRead;
+        size -= lengthToRead;
+        fileAddr += lengthToRead;
+    }
 }
