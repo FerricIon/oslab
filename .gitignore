@@ -5,4 +5,6 @@ test/shell
 test/sort
 test/halt
 test/pages
+test/fork
+test/exec
 .vscode/

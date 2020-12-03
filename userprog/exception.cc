@@ -25,6 +25,21 @@
 #include "system.h"
 #include "syscall.h"
 
+void ExecHandler(int dummy)
+{
+    currentThread->space->InitRegisters();
+    currentThread->space->RestoreState();
+    machine->Run();
+}
+
+void SyscallIncPC()
+{
+    int pcAfter = machine->registers[NextPCReg] + 4;
+    machine->registers[PrevPCReg] = machine->registers[PCReg];
+    machine->registers[PCReg] = machine->registers[NextPCReg];
+    machine->registers[NextPCReg] = pcAfter;
+}
+
 //----------------------------------------------------------------------
 // ExceptionHandler
 // 	Entry point into the Nachos kernel.  Called when a user program
@@ -61,8 +76,48 @@ void ExceptionHandler(ExceptionType which)
         }
         else if (type == SC_Exit)
         {
-            printf("%s exit with code %d.\n", currentThread->getName(), machine->ReadRegister(4));
+            printf("%s exit with code %d.\n", currentThread->getName(),
+                   machine->ReadRegister(4));
             currentThread->Finish();
+        }
+        else if (type == SC_Exec)
+        {
+            char *filename = new char[32];
+            memset(filename, 0, sizeof(filename));
+            for (int i = 0; i < 32; ++i)
+            {
+                while (!machine->ReadMem(machine->ReadRegister(4) + i,
+                                         1, (int *)&filename[i]))
+                    ;
+                if (filename[i] == '\0')
+                    break;
+            }
+            if (filename[31] != '\0')
+            {
+                printf("Failed to exec: filename too long...\n");
+                currentThread->Finish();
+            }
+            printf("%s Exec %s\n", currentThread->getName(), filename);
+            OpenFile *executable = fileSystem->Open(filename);
+
+            if (executable == NULL)
+            {
+                printf("Unable to open file %s\n",
+                       (char *)(machine->ReadRegister(4)));
+                return;
+            }
+            Thread *t = new Thread("exec thread");
+            t->space = new AddrSpace(executable);
+            delete executable;
+            t->Fork(ExecHandler, 0);
+
+            SyscallIncPC();
+        }
+        else if (type == SC_Yield)
+        {
+            printf("%s yields\n", currentThread->getName());
+            currentThread->Yield();
+            SyscallIncPC();
         }
         else
         {

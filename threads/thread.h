@@ -96,13 +96,13 @@ public:
 
   void Fork(VoidFunctionPtr func, void *arg); // Make thread run (*func)(arg)
   void Yield();                               // Relinquish the CPU if any
-      // other thread is runnable
-  void Sleep(); // Put the thread to sleep and
-      // relinquish the processor
-  void Finish(); // The thread is done executing
+                                              // other thread is runnable
+  void Sleep();                               // Put the thread to sleep and
+                                              // relinquish the processor
+  void Finish();                              // The thread is done executing
 
   void CheckOverflow(); // Check if thread has
-      // overflowed its stack
+                        // overflowed its stack
   void setStatus(ThreadStatus st) { status = st; }
   char *getName() { return (name); }
   void Print() { printf("%s, ", name); }
@@ -125,11 +125,11 @@ private:
   // one for its state while executing user code, one for its state
   // while executing kernel code.
 
-  int userRegisters[NumTotalRegs]; // user-level CPU register state
-
 public:
   void SaveUserState();    // save user-level register state
   void RestoreUserState(); // restore user-level register state
+
+  int userRegisters[NumTotalRegs]; // user-level CPU register state
 
   AddrSpace *space; // User code this thread is running.
 #endif
