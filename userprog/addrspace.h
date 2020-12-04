@@ -15,6 +15,7 @@
 
 #include "copyright.h"
 #include "filesys.h"
+#include "noff.h"
 
 #define UserStackSize 1024 // increase this as necessary!
 
@@ -46,8 +47,12 @@ private:
   unsigned int numPages;       // Number of pages in the virtual
                                // address space
 
+  NoffHeader *noffH;    // Noff file header
+  OpenFile *executable; // Executable file for reading
+
   void ManualReadTranslation(OpenFile *executable,
                              int virtAddr, int size, int fileAddr);
+  void LoadPage(int vpn);
 };
 
 #endif // ADDRSPACE_H

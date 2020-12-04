@@ -108,7 +108,8 @@ void ExceptionHandler(ExceptionType which)
             }
             Thread *t = new Thread("exec thread");
             t->space = new AddrSpace(executable);
-            delete executable;
+            // do not close file
+            // delete executable;
             t->Fork(ExecHandler, 0);
 
             SyscallIncPC();
