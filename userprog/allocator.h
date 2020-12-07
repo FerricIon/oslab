@@ -5,6 +5,14 @@
 
 #include "copyright.h"
 #include "machine.h"
+#include "addrspace.h"
+
+struct PTEProps
+{
+    AddrSpace *space;
+    TranslationEntry *entry;
+    char count;
+};
 
 class PageAllocator
 {
@@ -12,12 +20,13 @@ public:
     PageAllocator();
     ~PageAllocator();
 
-    int AllocPage();                // Allocate an empty page
-    void FreePage(int virtualPage); // Free a page
-    int Available();                // How many empty pages
+    void AllocPage(TranslationEntry *entry); // Allocate an empty page
+    void FreePage(TranslationEntry *entry);  // Free a page
+    void UpdateCount();                      // Update count
 
 private:
-    bool *pages;
+    PTEProps *pages;
+    int available;
 };
 
 #endif

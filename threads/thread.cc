@@ -149,6 +149,9 @@ Thread::Finish ()
     DEBUG('t', "Finishing thread \"%s\"\n", getName());
     
     threadToBeDestroyed = currentThread;
+#ifdef USER_PROGRAM
+    delete space;
+#endif
     Sleep();					// invokes SWITCH
     // not reached
 }

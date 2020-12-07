@@ -60,10 +60,16 @@ SwapHeader(NoffHeader *noffH)
 //	"executable" is the file containing the object code to load into memory
 //----------------------------------------------------------------------
 
-AddrSpace::AddrSpace(OpenFile *executable)
+AddrSpace::AddrSpace(OpenFile *executable, char *filename)
 {
     noffH = new NoffHeader;
     this->executable = executable;
+
+    swapFilename = new char[strlen(filename) + 4];
+    strcpy(swapFilename, filename);
+    strcat(swapFilename, ".swp");
+    fileSystem->Create(swapFilename, 0);
+    swap = fileSystem->Open(swapFilename);
 
     unsigned int i, size;
 
@@ -80,15 +86,7 @@ AddrSpace::AddrSpace(OpenFile *executable)
     numPages = divRoundUp(size, PageSize);
     size = numPages * PageSize;
 
-    ASSERT(numPages <= NumPhysPages); // check we're not trying
-                                      // to run anything too big --
-                                      // at least until we have
-                                      // virtual memory
-    if (numPages > allocator->Available())
-    {
-        printf("No enough empty pages...\n");
-        ASSERT(FALSE);
-    }
+    // No need to count available pages
 
     DEBUG('a', "Initializing address space, num pages %d, size %d\n",
           numPages, size);
@@ -97,7 +95,7 @@ AddrSpace::AddrSpace(OpenFile *executable)
     for (i = 0; i < numPages; i++)
     {
         pageTable[i].virtualPage = i; // for now, virtual page # = phys page #
-        pageTable[i].physicalPage = allocator->AllocPage();
+        // No need to allocate phys page now
         pageTable[i].valid = FALSE;
         pageTable[i].use = FALSE;
         pageTable[i].dirty = FALSE;
@@ -105,6 +103,9 @@ AddrSpace::AddrSpace(OpenFile *executable)
                                        // a separate page, we could set its
                                        // pages to be read-only
     }
+    swapSlot = new bool[numPages];
+    memset(swapSlot, 0, sizeof(bool) * numPages);
+    swapPage = new int[numPages];
 #ifdef USE_TLB
     tlb = new TranslationEntry[TLBSize];
     tlbCounter = new unsigned char[TLBSize];
@@ -127,13 +128,18 @@ AddrSpace::~AddrSpace()
     delete[] tlbCounter;
 
     for (int i = 0; i < numPages; ++i)
-    {
-        allocator->FreePage(pageTable[i].physicalPage);
-    }
+        if (pageTable[i].valid)
+            allocator->FreePage(&pageTable[i]);
+
     delete[] pageTable;
+    delete[] swapSlot;
+    delete[] swapPage;
 
     delete noffH;
     delete executable;
+    delete swap;
+    fileSystem->Remove(swapFilename);
+    delete[] swapFilename;
 }
 
 //----------------------------------------------------------------------
@@ -212,7 +218,10 @@ TranslationEntry *AddrSpace::LookupPageTable(int vpn, TranslationEntry *pte)
     if (vpn < 0 || vpn >= numPages)
         return NULL;
     if (!pageTable[vpn].valid)
+    {
+        allocator->AllocPage(&pageTable[vpn]);
         LoadPage(vpn);
+    }
     if (pte != NULL && pte->valid)
         pageTable[pte->virtualPage].dirty = pte->dirty;
     return pageTable + vpn;
@@ -246,6 +255,12 @@ int AddrSpace::TlbIndex()
     for (int i = 0; i < TLBSize; ++i)
         if (tlbCounter[i] < tlbCounter[index])
             index = i;
+    int count = 0, *indexes = new int[TLBSize];
+    for (int i = 0; i < TLBSize; ++i)
+        if (tlbCounter[i] == tlbCounter[index])
+            indexes[count++] = i;
+    index = indexes[Random() % count];
+    delete[] indexes;
     tlbCounter[index] = 0xFF;
     return index;
 }
@@ -276,44 +291,95 @@ void AddrSpace::ManualReadTranslation(
     }
 }
 
+//----------------------------------------------------------------------
+// AddrSpace::LoadPage
+//  Load a page of given vpn from either excutable file or the swap
+//  file.
+//----------------------------------------------------------------------
+
 void AddrSpace::LoadPage(int vpn)
 {
     ASSERT(!pageTable[vpn].valid);
-    int startAddr = vpn * PageSize;
-    int endAddr = startAddr + PageSize;
-    while (startAddr != endAddr)
+    printf("LOAD PAGE %d, PPN %d\n", vpn, pageTable[vpn].physicalPage);
+
+    if (!pageTable[vpn].dirty)
     {
-        if (noffH->code.virtualAddr <= startAddr &&
-            startAddr < noffH->code.virtualAddr + noffH->code.size)
+        int startAddr = vpn * PageSize;
+        int endAddr = startAddr + PageSize;
+        while (startAddr != endAddr)
         {
-            int addr = startAddr - noffH->code.virtualAddr +
-                       noffH->code.inFileAddr;
-            int size = min(noffH->code.virtualAddr + noffH->code.size,
-                           endAddr) -
-                       startAddr;
-            ManualReadTranslation(executable, startAddr, size, addr);
-            startAddr += size;
+            if (noffH->code.virtualAddr <= startAddr &&
+                startAddr < noffH->code.virtualAddr + noffH->code.size)
+            {
+                int addr = startAddr - noffH->code.virtualAddr +
+                           noffH->code.inFileAddr;
+                int size = min(noffH->code.virtualAddr + noffH->code.size,
+                               endAddr) -
+                           startAddr;
+                ManualReadTranslation(executable, startAddr, size, addr);
+                startAddr += size;
+            }
+            else if (noffH->initData.virtualAddr <= startAddr &&
+                     startAddr < noffH->initData.virtualAddr +
+                                     noffH->initData.size)
+            {
+                int addr = startAddr - noffH->initData.virtualAddr +
+                           noffH->initData.inFileAddr;
+                int size = min(noffH->initData.virtualAddr + noffH->initData.size,
+                               endAddr) -
+                           startAddr;
+                ManualReadTranslation(executable, startAddr, size, addr);
+                startAddr += size;
+            }
+            else
+            {
+                bzero(machine->mainMemory +
+                          pageTable[vpn].physicalPage * PageSize +
+                          startAddr - vpn * PageSize,
+                      endAddr - startAddr);
+                startAddr = endAddr;
+            }
         }
-        else if (noffH->initData.virtualAddr <= startAddr &&
-                 startAddr < noffH->initData.virtualAddr +
-                                 noffH->initData.size)
-        {
-            int addr = startAddr - noffH->initData.virtualAddr +
-                       noffH->initData.inFileAddr;
-            int size = min(noffH->initData.virtualAddr + noffH->initData.size,
-                           endAddr) -
-                       startAddr;
-            ManualReadTranslation(executable, startAddr, size, addr);
-            startAddr += size;
-        }
-        else
-        {
-            bzero(machine->mainMemory +
-                      pageTable[vpn].physicalPage * PageSize +
-                      startAddr - vpn * PageSize,
-                  endAddr - startAddr);
-            startAddr = endAddr;
-        }
+        pageTable[vpn].valid = TRUE;
     }
-    pageTable[vpn].valid = true;
+    else
+    {
+        printf("LOAD SWAP %d\n", vpn);
+        ManualReadTranslation(swap, vpn * PageSize, PageSize, swapPage[vpn] * PageSize);
+        swapSlot[swapPage[vpn]] = FALSE;
+        pageTable[vpn].valid = TRUE;
+    }
+}
+
+//----------------------------------------------------------------------
+// AddrSpace::SwapOut
+//  Swap a page with given vpn into the swap file
+//----------------------------------------------------------------------
+
+void AddrSpace::SwapOut(int vpn)
+{
+    pageTable[vpn].valid = FALSE;
+    for (int i = 0; i < TLBSize; ++i)
+    {
+        if (machine->tlb[i].virtualPage == vpn)
+            machine->tlb[i].valid = FALSE;
+        if (tlb[i].virtualPage == vpn)
+            tlb[i].valid = FALSE;
+    }
+
+    if (!pageTable[vpn].dirty)
+        return;
+
+    int index = -1;
+    for (int i = 0; i < numPages; ++i)
+        if (!swapSlot[i])
+        {
+            index = i;
+            break;
+        }
+    swap->WriteAt((char *)&machine->mainMemory
+                      [pageTable[vpn].physicalPage * PageSize],
+                  PageSize, index * PageSize);
+    swapSlot[index] = TRUE;
+    swapPage[vpn] = index;
 }

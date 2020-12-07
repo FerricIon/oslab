@@ -63,6 +63,7 @@ TimerInterruptHandler(int dummy)
         interrupt->YieldOnReturn();
 #ifdef USER_PROGRAM
     currentThread->space->UpdateTlbCounter();
+    allocator->UpdateCount();
 #endif
 }
 

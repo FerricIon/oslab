@@ -22,10 +22,10 @@
 class AddrSpace
 {
 public:
-  AddrSpace(OpenFile *executable); // Create an address space,
-                                   // initializing it with the program
-                                   // stored in the file "executable"
-  ~AddrSpace();                    // De-allocate an address space
+  AddrSpace(OpenFile *executable, char *filename); // Create an address space,
+                                                   // initializing it with the program
+                                                   // stored in the file "executable"
+  ~AddrSpace();                                    // De-allocate an address space
 
   void InitRegisters(); // Initialize user-level CPU registers,
                         // before jumping to user code
@@ -39,6 +39,7 @@ public:
   void UpdateTlbCounter();                    // Called when handling a TimerInt
   int TlbIndex();                             // Get the index with minimal
                                               // counter value and set to 0xFF
+  void SwapOut(int vpn);
 
 private:
   TranslationEntry *tlb;
@@ -49,6 +50,10 @@ private:
 
   NoffHeader *noffH;    // Noff file header
   OpenFile *executable; // Executable file for reading
+  OpenFile *swap;
+  char *swapFilename;
+  bool *swapSlot;
+  int *swapPage;
 
   void ManualReadTranslation(OpenFile *executable,
                              int virtAddr, int size, int fileAddr);

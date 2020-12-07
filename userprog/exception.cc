@@ -82,7 +82,7 @@ void ExceptionHandler(ExceptionType which)
         }
         else if (type == SC_Exec)
         {
-            char *filename = new char[32];
+            char filename[32];
             memset(filename, 0, sizeof(filename));
             for (int i = 0; i < 32; ++i)
             {
@@ -106,10 +106,11 @@ void ExceptionHandler(ExceptionType which)
                        (char *)(machine->ReadRegister(4)));
                 return;
             }
+
             Thread *t = new Thread("exec thread");
-            t->space = new AddrSpace(executable);
+            t->space = new AddrSpace(executable, filename);
+
             // do not close file
-            // delete executable;
             t->Fork(ExecHandler, 0);
 
             SyscallIncPC();
@@ -131,8 +132,11 @@ void ExceptionHandler(ExceptionType which)
     {
         DEBUG('a', "Page fault, badVAddr: %d.\n", machine->registers[BadVAddrReg]);
         static int pagefaultCounter;
-        printf("PageFault #%d, bad virtual addr: 0x%x\n",
-               ++pagefaultCounter, machine->registers[BadVAddrReg]);
+        // printf("PageFault #%d, bad virtual addr: 0x%x\n",
+        //        ++pagefaultCounter, machine->registers[BadVAddrReg]);
+
+        // if (pagefaultCounter > 10)
+        //     ASSERT(FALSE);
 
         unsigned int virtAddr = machine->registers[BadVAddrReg];
         unsigned int vpn = (unsigned)virtAddr / PageSize;
@@ -162,6 +166,10 @@ void ExceptionHandler(ExceptionType which)
         }
     }
 #endif
+    else if (which == IllegalInstrException)
+    {
+        ASSERT(FALSE);
+    }
     else
     {
         printf("Unexpected user mode exception %d %d\n", which, type);
