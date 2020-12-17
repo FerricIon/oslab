@@ -30,6 +30,7 @@
 OpenFile::OpenFile(int sector)
 {
     hdr = new FileHeader;
+    hdrSector = sector;
     hdr->FetchFrom(sector);
     seekPosition = 0;
 }
@@ -41,6 +42,7 @@ OpenFile::OpenFile(int sector)
 
 OpenFile::~OpenFile()
 {
+    hdr->WriteBack(hdrSector);
     delete hdr;
 }
 
@@ -112,6 +114,8 @@ int OpenFile::Write(char *into, int numBytes)
 
 int OpenFile::ReadAt(char *into, int numBytes, int position)
 {
+    hdr->UpdateLastVisited();
+
     int fileLength = hdr->FileLength();
     int i, firstSector, lastSector, numSectors;
     char *buf;
@@ -176,6 +180,8 @@ int OpenFile::WriteAt(char *from, int numBytes, int position)
     for (i = firstSector; i <= lastSector; i++)
         synchDisk->WriteSector(hdr->ByteToSector(i * SectorSize),
                                &buf[(i - firstSector) * SectorSize]);
+
+    hdr->UpdateLastModified();
     delete[] buf;
     return numBytes;
 }

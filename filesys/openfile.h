@@ -23,8 +23,8 @@
 #include "copyright.h"
 #include "utility.h"
 
-#ifdef FILESYS_STUB // Temporarily implement calls to
-					// Nachos file system as calls to UNIX!
+#ifdef FILESYS_STUB // Temporarily implement calls to       \
+					// Nachos file system as calls to UNIX! \
 					// See definitions listed under #else
 class OpenFile
 {
@@ -103,6 +103,7 @@ public:
 private:
 	FileHeader *hdr;  // Header for this file
 	int seekPosition; // Current position within the file
+	int hdrSector;
 };
 
 #endif // FILESYS

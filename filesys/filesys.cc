@@ -100,6 +100,16 @@ FileSystem::FileSystem(bool format)
         ASSERT(mapHdr->Allocate(freeMap, FreeMapFileSize));
         ASSERT(dirHdr->Allocate(freeMap, DirectoryFileSize));
 
+        // Update related attributes of the two files.
+        mapHdr->SetType(0);
+        mapHdr->UpdateCreated();
+        mapHdr->UpdateLastVisited();
+        mapHdr->UpdateLastModified();
+        dirHdr->SetType(1);
+        dirHdr->UpdateCreated();
+        dirHdr->UpdateLastVisited();
+        dirHdr->UpdateLastModified();
+
         // Flush the bitmap and directory FileHeaders back to disk
         // We need to do this before we can "Open" the file, since open
         // reads the file header off of disk (and currently the disk has garbage
@@ -173,9 +183,11 @@ FileSystem::FileSystem(bool format)
 //
 //	"name" -- name of file to be created
 //	"initialSize" -- size of file to be created
+//  "type" -- type of file to be created
+//            0 for common file (by default), 1 for directory
 //----------------------------------------------------------------------
 
-bool FileSystem::Create(char *name, int initialSize)
+bool FileSystem::Create(char *name, int initialSize, int type)
 {
     Directory *directory;
     BitMap *freeMap;
@@ -207,6 +219,11 @@ bool FileSystem::Create(char *name, int initialSize)
             else
             {
                 success = TRUE;
+                // Init timestamps
+                hdr->SetType(type);
+                hdr->UpdateCreated();
+                hdr->UpdateLastVisited();
+                hdr->UpdateLastModified();
                 // everthing worked, flush all changes back to disk
                 hdr->WriteBack(sector);
                 directory->WriteBack(directoryFile);
@@ -341,5 +358,35 @@ void FileSystem::Print()
     delete bitHdr;
     delete dirHdr;
     delete freeMap;
+    delete directory;
+}
+
+//----------------------------------------------------------------------
+// FileSystem::Stat
+//  Print stats about a file given its filename
+//  Directly calls FileHeader::Print
+//----------------------------------------------------------------------
+
+void FileSystem::Stat(char *name)
+{
+    Directory *directory;
+    FileHeader *fileHdr;
+    int sector;
+
+    directory = new Directory(NumDirEntries);
+    directory->FetchFrom(directoryFile);
+    sector = directory->Find(name);
+    if (sector == -1)
+    {
+        delete directory;
+        printf("No such file or directory.\n");
+        return; // file not found
+    }
+    fileHdr = new FileHeader;
+    fileHdr->FetchFrom(sector);
+
+    fileHdr->Print(FALSE);
+
+    delete fileHdr;
     delete directory;
 }

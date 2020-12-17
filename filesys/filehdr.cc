@@ -27,6 +27,8 @@
 #include "system.h"
 #include "filehdr.h"
 
+#include <ctime>
+
 //----------------------------------------------------------------------
 // FileHeader::Allocate
 // 	Initialize a fresh file header for a newly created file.
@@ -121,26 +123,73 @@ int FileHeader::FileLength()
 //	the data blocks pointed to by the file header.
 //----------------------------------------------------------------------
 
-void FileHeader::Print()
+void FileHeader::Print(bool showContent)
 {
     int i, j, k;
     char *data = new char[SectorSize];
 
-    printf("FileHeader contents.  File size: %d.  File blocks:\n", numBytes);
-    for (i = 0; i < numSectors; i++)
-        printf("%d ", dataSectors[i]);
-    printf("\nFile contents:\n");
-    for (i = k = 0; i < numSectors; i++)
+    printf("FileHeader contents.  File size: %d. File type: %s.\n",
+           numBytes, type ? "directory" : "common");
+    printf("Created at: %d. Last Visited at: %d.\n", created, lastVisited);
+    printf("Last Modified at: %d. File blocks:\n", lastModified);
+
+    if (showContent)
     {
-        synchDisk->ReadSector(dataSectors[i], data);
-        for (j = 0; (j < SectorSize) && (k < numBytes); j++, k++)
+        for (i = 0; i < numSectors; i++)
+            printf("%d ", dataSectors[i]);
+        printf("\nFile contents:\n");
+        for (i = k = 0; i < numSectors; i++)
         {
-            if ('\040' <= data[j] && data[j] <= '\176') // isprint(data[j])
-                printf("%c", data[j]);
-            else
-                printf("\\%x", (unsigned char)data[j]);
+            synchDisk->ReadSector(dataSectors[i], data);
+            for (j = 0; (j < SectorSize) && (k < numBytes); j++, k++)
+            {
+                if ('\040' <= data[j] && data[j] <= '\176') // isprint(data[j])
+                    printf("%c", data[j]);
+                else
+                    printf("\\%x", (unsigned char)data[j]);
+            }
+            printf("\n");
         }
-        printf("\n");
     }
     delete[] data;
+}
+
+//----------------------------------------------------------------------
+// FileHeader::SetType
+//  Set file type.
+//----------------------------------------------------------------------
+
+void FileHeader::SetType(int _type)
+{
+    type = _type;
+}
+
+//----------------------------------------------------------------------
+// FileHeader::UpdateCreated
+//  Update created timestamp.
+//----------------------------------------------------------------------
+
+void FileHeader::UpdateCreated()
+{
+    created = time(NULL);
+}
+
+//----------------------------------------------------------------------
+// FileHeader::UpdateLastVisited
+//  Update lastVisited timestamp.
+//----------------------------------------------------------------------
+
+void FileHeader::UpdateLastVisited()
+{
+    lastVisited = time(NULL);
+}
+
+//----------------------------------------------------------------------
+// FileHeader::UpdateLastModified
+//  Update lastModified timestamp.
+//----------------------------------------------------------------------
+
+void FileHeader::UpdateLastModified()
+{
+    lastModified = time(NULL);
 }

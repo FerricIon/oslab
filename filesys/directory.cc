@@ -40,7 +40,10 @@ Directory::Directory(int size)
     table = new DirectoryEntry[size];
     tableSize = size;
     for (int i = 0; i < tableSize; i++)
+    {
         table[i].inUse = FALSE;
+        table[i].sector = 0;
+    }
 }
 
 //----------------------------------------------------------------------
@@ -88,8 +91,29 @@ void Directory::WriteBack(OpenFile *file)
 int Directory::FindIndex(char *name)
 {
     for (int i = 0; i < tableSize; i++)
-        if (table[i].inUse && !strncmp(table[i].name, name, FileNameMaxLen))
-            return i;
+        if (table[i].inUse)
+        {
+            int index = i, match = TRUE;
+            int compared = 0;
+            while (match)
+            {
+                if (strncmp(table[index].name, name + compared,
+                            FileNameMaxLen) == 0)
+                {
+                    if (table[index].next == -1)
+                        break;
+                    else
+                    {
+                        compared += FileNameMaxLen;
+                        index = table[index].next;
+                    }
+                }
+                else
+                    match = FALSE;
+            }
+            if (match)
+                return i;
+        }
     return -1; // name not in directory
 }
 
@@ -127,13 +151,30 @@ bool Directory::Add(char *name, int newSector)
     if (FindIndex(name) != -1)
         return FALSE;
 
+    int length = strlen(name);
+    int copied = 0, last;
     for (int i = 0; i < tableSize; i++)
-        if (!table[i].inUse)
+        if (!table[i].inUse && table[i].sector != -1)
         {
-            table[i].inUse = TRUE;
-            strncpy(table[i].name, name, FileNameMaxLen);
-            table[i].sector = newSector;
-            return TRUE;
+            if (copied == 0)
+            {
+                table[i].inUse = TRUE;
+                table[i].sector = newSector;
+            }
+            else
+            {
+                table[i].sector = -1;
+                table[last].next = i;
+            }
+            int toCopy = min(FileNameMaxLen, length - copied);
+            strncpy(table[i].name, name + copied, toCopy);
+            copied += toCopy;
+            last = i;
+            if (copied == length)
+            {
+                table[i].next = -1;
+                return TRUE;
+            }
         }
     return FALSE; // no space.  Fix when we have extensible files.
 }
@@ -153,6 +194,8 @@ bool Directory::Remove(char *name)
     if (i == -1)
         return FALSE; // name not in directory
     table[i].inUse = FALSE;
+    for (int index = i; index != -1; index = table[index].next)
+        table[index].sector = 0;
     return TRUE;
 }
 
@@ -165,7 +208,11 @@ void Directory::List()
 {
     for (int i = 0; i < tableSize; i++)
         if (table[i].inUse)
-            printf("%s\n", table[i].name);
+        {
+            for (int index = i; index != -1; index = table[index].next)
+                printf("%s", table[index].name);
+            printf("\n");
+        }
 }
 
 //----------------------------------------------------------------------
@@ -182,7 +229,10 @@ void Directory::Print()
     for (int i = 0; i < tableSize; i++)
         if (table[i].inUse)
         {
-            printf("Name: %s, Sector: %d\n", table[i].name, table[i].sector);
+            printf("Name: ");
+            for (int index = i; index != -1; index = table[index].next)
+                printf("%s", table[index].name);
+            printf(", Sector: %d\n", table[i].sector);
             hdr->FetchFrom(table[i].sector);
             hdr->Print();
         }

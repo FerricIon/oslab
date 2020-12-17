@@ -79,7 +79,7 @@ public:
 							 // the disk, so initialize the directory
 							 // and the bitmap of free blocks.
 
-	bool Create(char *name, int initialSize);
+	bool Create(char *name, int initialSize, int type = 0);
 	// Create a file (UNIX creat)
 
 	OpenFile *Open(char *name); // Open a file (UNIX open)
@@ -89,6 +89,8 @@ public:
 	void List(); // List all the files in the file system
 
 	void Print(); // List all the files and their contents
+
+	void Stat(char *name); // Print a file's attributes
 
 private:
 	OpenFile *freeMapFile;	 // Bit map of free disk blocks,
