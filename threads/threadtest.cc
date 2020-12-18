@@ -92,6 +92,37 @@ void ThreadTest2()
     printf("\n");
 }
 
+void ThreadTest3()
+{
+    printf("*** Generating 5120 random integers\n");
+    int dataArray[2 << 10];
+    for (int i = 0; i < 2 << 10; ++i)
+        dataArray[i] = Random();
+
+    printf("*** Creating Big_File_Test\n");
+    fileSystem->Create("Big_File_Test", (2 << 10) * sizeof(int));
+    printf("*** Opening Big_File_Test\n");
+    OpenFile *openFile = fileSystem->Open("Big_File_Test");
+    printf("*** Writing integers into Big_File_Test\n");
+    openFile->WriteAt((char *)dataArray, sizeof(dataArray), 0);
+
+    printf("### Checking data integrity\n");
+    bool flag = TRUE;
+    for (int i = 0; i < (2 << 10); ++i)
+    {
+        int dataFromDisk;
+        openFile->ReadAt((char *)&dataFromDisk, sizeof(int), i * sizeof(int));
+        flag &= (dataFromDisk == dataArray[i]);
+    }
+    if (flag)
+        printf("*** OK!\n");
+    else
+        printf("xxx Data corrupted\n");
+
+    printf("*** Removing Big_File_Test\n");
+    fileSystem->Remove("Big_File_Test");
+}
+
 void ThreadTest()
 {
     switch (testnum)
@@ -102,9 +133,9 @@ void ThreadTest()
     case 2:
         ThreadTest2();
         break;
-    // case 3:
-    //     ThreadTest3();
-    //     break;
+    case 3:
+        ThreadTest3();
+        break;
     // case 4:
     //     ThreadTest4();
     //     break;

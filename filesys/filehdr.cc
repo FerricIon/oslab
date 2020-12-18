@@ -29,6 +29,8 @@
 
 #include <ctime>
 
+#define min(a, b) (((a) < (b)) ? (a) : (b))
+
 //----------------------------------------------------------------------
 // FileHeader::Allocate
 // 	Initialize a fresh file header for a newly created file.
@@ -44,11 +46,22 @@ bool FileHeader::Allocate(BitMap *freeMap, int fileSize)
 {
     numBytes = fileSize;
     numSectors = divRoundUp(fileSize, SectorSize);
-    if (freeMap->NumClear() < numSectors)
+    numSecondaryIndexes = divRoundUp(numSectors, SectorsPerSecondaryIndex);
+    if (freeMap->NumClear() < numSectors + numSecondaryIndexes)
         return FALSE; // not enough space
 
-    for (int i = 0; i < numSectors; i++)
-        dataSectors[i] = freeMap->Find();
+    int dataSectorsToAllocate = numSectors;
+    for (int i = 0; i < numSecondaryIndexes; i++)
+    {
+        secondaryIndexSectors[i] = freeMap->Find();
+        int dataSectors[SectorsPerSecondaryIndex];
+        int sectors = min(dataSectorsToAllocate, SectorsPerSecondaryIndex);
+        for (int j = 0; j < sectors; j++)
+            dataSectors[j] = freeMap->Find();
+
+        synchDisk->WriteSector(secondaryIndexSectors[i], (char *)dataSectors);
+        dataSectorsToAllocate -= sectors;
+    }
     return TRUE;
 }
 
@@ -61,10 +74,24 @@ bool FileHeader::Allocate(BitMap *freeMap, int fileSize)
 
 void FileHeader::Deallocate(BitMap *freeMap)
 {
-    for (int i = 0; i < numSectors; i++)
+    int dataSectorsToDeallocate = numSectors;
+    for (int i = 0; i < numSecondaryIndexes; i++)
     {
-        ASSERT(freeMap->Test((int)dataSectors[i])); // ought to be marked!
-        freeMap->Clear((int)dataSectors[i]);
+        // ought to be marked!
+        ASSERT(freeMap->Test((int)secondaryIndexSectors[i]));
+
+        int dataSectors[SectorsPerSecondaryIndex];
+        int sectors = min(dataSectorsToDeallocate, SectorsPerSecondaryIndex);
+        synchDisk->ReadSector(secondaryIndexSectors[i], (char *)dataSectors);
+
+        for (int j = 0; j < sectors; j++)
+        {
+            // ought to be marked!
+            ASSERT(freeMap->Test((int)dataSectors[j]));
+            freeMap->Clear(dataSectors[j]);
+        }
+        freeMap->Clear(secondaryIndexSectors[i]);
+        dataSectorsToDeallocate -= sectors;
     }
 }
 
@@ -104,6 +131,12 @@ void FileHeader::WriteBack(int sector)
 
 int FileHeader::ByteToSector(int offset)
 {
+    int toSecondaryIndex = offset / (SectorsPerSecondaryIndex * SectorSize);
+    int dataSectors[SectorsPerSecondaryIndex];
+    synchDisk->ReadSector(secondaryIndexSectors[toSecondaryIndex],
+                          (char *)dataSectors);
+
+    offset %= (SectorsPerSecondaryIndex * SectorSize);
     return (dataSectors[offset / SectorSize]);
 }
 
@@ -135,20 +168,39 @@ void FileHeader::Print(bool showContent)
 
     if (showContent)
     {
-        for (i = 0; i < numSectors; i++)
-            printf("%d ", dataSectors[i]);
-        printf("\nFile contents:\n");
-        for (i = k = 0; i < numSectors; i++)
+        int _numSectors = numSectors;
+        for (i = 0; i < numSecondaryIndexes; i++)
         {
-            synchDisk->ReadSector(dataSectors[i], data);
-            for (j = 0; (j < SectorSize) && (k < numBytes); j++, k++)
+            int dataSectors[SectorsPerSecondaryIndex];
+            synchDisk->ReadSector(secondaryIndexSectors[i],
+                                  (char *)dataSectors);
+            int sectors = min(_numSectors, SectorsPerSecondaryIndex);
+            for (j = 0; j < sectors; j++)
+                printf("%d ", dataSectors[j]);
+            _numSectors -= sectors;
+        }
+        printf("\nFile contents:\n");
+        _numSectors = numSectors;
+        for (i = 0; i < numSecondaryIndexes; i++)
+        {
+            int dataSectors[SectorsPerSecondaryIndex];
+            synchDisk->ReadSector(secondaryIndexSectors[i],
+                                  (char *)dataSectors);
+            int sectors = min(_numSectors, SectorsPerSecondaryIndex);
+            for (i = k = 0; i < sectors; i++)
             {
-                if ('\040' <= data[j] && data[j] <= '\176') // isprint(data[j])
-                    printf("%c", data[j]);
-                else
-                    printf("\\%x", (unsigned char)data[j]);
+                synchDisk->ReadSector(dataSectors[i], data);
+                for (j = 0; (j < SectorSize) && (k < numBytes); j++, k++)
+                {
+                    // isprint(data[j])
+                    if ('\040' <= data[j] && data[j] <= '\176')
+                        printf("%c", data[j]);
+                    else
+                        printf("\\%x", (unsigned char)data[j]);
+                }
+                printf("\n");
             }
-            printf("\n");
+            _numSectors -= numSectors;
         }
     }
     delete[] data;
@@ -192,4 +244,14 @@ void FileHeader::UpdateLastVisited()
 void FileHeader::UpdateLastModified()
 {
     lastModified = time(NULL);
+}
+
+//----------------------------------------------------------------------
+// FileHeader::GetType
+//  Get type of file.
+//----------------------------------------------------------------------
+
+int FileHeader::GetType()
+{
+    return type;
 }

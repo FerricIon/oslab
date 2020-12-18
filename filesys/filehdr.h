@@ -17,8 +17,10 @@
 #include "disk.h"
 #include "bitmap.h"
 
-#define NumDirect ((SectorSize - (2 + 4) * sizeof(int)) / sizeof(int))
-#define MaxFileSize (NumDirect * SectorSize)
+#define NumIndex ((SectorSize - (3 + 4) * sizeof(int)) / sizeof(int))
+#define SectorsPerSecondaryIndex (SectorSize / sizeof(int))
+#define NumDirect (NumIndex * (SectorSize / sizeof(int)))
+#define MaxFileSize (NumIndex * SectorsPerSecondaryIndex * SectorSize)
 
 // The following class defines the Nachos "file header" (in UNIX terms,
 // the "i-node"), describing where on disk to find all of the data in the file.
@@ -61,12 +63,14 @@ public:
   void UpdateCreated();      // Update timestamp
   void UpdateLastVisited();  // Update timestamp
   void UpdateLastModified(); // Update timestamp
+  int GetType();             // Get type of file
 
 private:
-  int numBytes;               // Number of bytes in the file
-  int numSectors;             // Number of data sectors in the file
-  int dataSectors[NumDirect]; // Disk sector numbers for each data
-                              // block in the file
+  int numBytes;                        // Number of bytes in the file
+  int numSectors;                      // Number of data sectors in the file
+  int numSecondaryIndexes;             // Number of secondary indexes
+  int secondaryIndexSectors[NumIndex]; // Disk sector numbers for secondary
+                                       // index files
 
   int type;         // 0 for a common file, 1 for a directory file
   int created;      // Time when creating the file
