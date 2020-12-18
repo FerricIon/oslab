@@ -45,6 +45,7 @@ public:
                                                //  on disk for the file data
   void Deallocate(BitMap *bitMap);             // De-allocate this file's
                                                //  data blocks
+  bool Append(BitMap *BitMap, int size);       // Allocate additional bytes
 
   void FetchFrom(int sectorNumber); // Initialize file header from disk
   void WriteBack(int sectorNumber); // Write modifications to file header

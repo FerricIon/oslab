@@ -96,6 +96,45 @@ void FileHeader::Deallocate(BitMap *freeMap)
 }
 
 //----------------------------------------------------------------------
+// FileHeader::Append
+//  Allocate new blocks for appended content
+//----------------------------------------------------------------------
+
+bool FileHeader::Append(BitMap *freeMap, int size)
+{
+    int newBytes = numBytes + size;
+    int newSectors = divRoundUp(newBytes, SectorSize);
+    int newSecondaryIndexes = divRoundUp(newSectors, SectorsPerSecondaryIndex);
+
+    if (freeMap->NumClear() < (newSectors + newSecondaryIndexes) -
+                                  (numSectors + numSecondaryIndexes))
+        return FALSE;
+
+    for (int i = 0; i < newSecondaryIndexes - numSecondaryIndexes; ++i)
+        secondaryIndexSectors[i + numSecondaryIndexes] = freeMap->Find();
+    int dataSectorsToAllocate = newSectors - numSectors;
+    int start = numSectors % SectorsPerSecondaryIndex;
+    for (int i = numSecondaryIndexes - !!start; i < newSecondaryIndexes; ++i)
+    {
+        int dataSectors[SectorsPerSecondaryIndex];
+        synchDisk->ReadSector(secondaryIndexSectors[i], (char *)dataSectors);
+        int sectors = min(dataSectorsToAllocate, SectorsPerSecondaryIndex);
+        for (int j = start; j < sectors; j++)
+            dataSectors[j] = freeMap->Find();
+
+        synchDisk->WriteSector(secondaryIndexSectors[i], (char *)dataSectors);
+        dataSectorsToAllocate -= (sectors - start);
+        start = 0;
+    }
+
+    numBytes = newBytes;
+    numSectors = newSectors;
+    numSecondaryIndexes = newSecondaryIndexes;
+
+    return TRUE;
+}
+
+//----------------------------------------------------------------------
 // FileHeader::FetchFrom
 // 	Fetch contents of file header from disk.
 //

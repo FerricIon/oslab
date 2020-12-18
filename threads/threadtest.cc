@@ -123,6 +123,49 @@ void ThreadTest3()
     fileSystem->Remove("Big_File_Test");
 }
 
+void ThreadTest5()
+{
+    printf("*** Generating 2048 random integers\n");
+    int dataArray[2 << 10];
+    for (int i = 0; i < 2 << 10; ++i)
+        dataArray[i] = Random();
+
+    printf("*** Creating Dynamic_File_Test\n");
+    fileSystem->Create("Dynamic_File_Test");
+    printf("*** Opening Dynamic_File_Test\n");
+    OpenFile *openFile = fileSystem->Open("Dynamic_File_Test");
+    printf("### file size: %d\n", openFile->Length());
+    printf("*** Writing 616 integers into Dynamic_File_Test\n");
+    openFile->WriteAt((char *)dataArray, sizeof(int) * 616, 0);
+    printf("### file size: %d\n", openFile->Length());
+    printf("*** Writing 2048 integers into Dynamic_File_Test\n");
+    openFile->WriteAt((char *)dataArray, sizeof(dataArray), openFile->Length());
+    printf("### file size: %d\n", openFile->Length());
+
+    printf("### Checking data integrity\n");
+    bool flag = TRUE;
+    for (int i = 0; i < 616; ++i)
+    {
+        int dataFromDisk;
+        openFile->ReadAt((char *)&dataFromDisk, sizeof(int), i * sizeof(int));
+        flag &= (dataFromDisk == dataArray[i]);
+    }
+    for (int i = 0; i < (2 << 10); ++i)
+    {
+        int dataFromDisk;
+        openFile->ReadAt((char *)&dataFromDisk, sizeof(int),
+                         (i + 616) * sizeof(int));
+        flag &= (dataFromDisk == dataArray[i]);
+    }
+    if (flag)
+        printf("*** OK!\n");
+    else
+        printf("xxx Data corrupted\n");
+
+    printf("*** Removing Dynamic_File_Test\n");
+    fileSystem->Remove("Dynamic_File_Test");
+}
+
 void ThreadTest()
 {
     switch (testnum)
@@ -139,9 +182,9 @@ void ThreadTest()
     // case 4:
     //     ThreadTest4();
     //     break;
-    // case 5:
-    //     ThreadTest5();
-    //     break;
+    case 5:
+        ThreadTest5();
+        break;
     default:
         printf("No test specified.\n");
         break;
