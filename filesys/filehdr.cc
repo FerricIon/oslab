@@ -30,6 +30,7 @@
 #include <ctime>
 
 #define min(a, b) (((a) < (b)) ? (a) : (b))
+#define max(a, b) (((a) > (b)) ? (a) : (b))
 
 //----------------------------------------------------------------------
 // FileHeader::Allocate
@@ -272,7 +273,7 @@ void FileHeader::UpdateCreated()
 
 void FileHeader::UpdateLastVisited()
 {
-    lastVisited = time(NULL);
+    lastVisited = max(lastVisited, time(NULL));
 }
 
 //----------------------------------------------------------------------
@@ -282,7 +283,7 @@ void FileHeader::UpdateLastVisited()
 
 void FileHeader::UpdateLastModified()
 {
-    lastModified = time(NULL);
+    lastModified = max(lastModified, time(NULL));
 }
 
 //----------------------------------------------------------------------

@@ -166,6 +166,41 @@ void ThreadTest5()
     fileSystem->Remove("Dynamic_File_Test");
 }
 
+void ThreadTest6()
+{
+    printf("*** Create a\n");
+    fileSystem->Create("a");
+    printf("*** list\n");
+    fileSystem->List();
+    printf("*** Open a\n");
+    OpenFile *openFile = fileSystem->OpenFile("a");
+    printf("*** Close a\n");
+    delete openFile;
+    printf("*** list\n");
+    fileSystem->List();
+    printf("*** Remove a\n");
+    fileSystem->Remove("a");
+    printf("*** list\n");
+    fileSystem->List();
+
+    puts("==========");
+
+    printf("*** Create a\n");
+    fileSystem->Create("a");
+    printf("*** list\n");
+    fileSystem->List();
+    printf("*** Open a\n");
+    OpenFile *openFile = fileSystem->OpenFile("a");
+    printf("*** Remove a\n");
+    fileSystem->Remove("a");
+    printf("*** list\n");
+    fileSystem->List();
+    printf("*** Close a\n");
+    delete openFile;
+    printf("*** list\n");
+    fileSystem->List();
+}
+
 void ThreadTest()
 {
     switch (testnum)
@@ -184,6 +219,9 @@ void ThreadTest()
     //     break;
     case 5:
         ThreadTest5();
+        break;
+    case 6:
+        ThreadTest6();
         break;
     default:
         printf("No test specified.\n");

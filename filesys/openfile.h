@@ -20,8 +20,11 @@
 #ifndef OPENFILE_H
 #define OPENFILE_H
 
+#include <map>
+
 #include "copyright.h"
 #include "utility.h"
+#include "synch.h"
 
 #ifdef FILESYS_STUB // Temporarily implement calls to       \
 					// Nachos file system as calls to UNIX! \
@@ -100,7 +103,11 @@ public:
 				  // than the UNIX idiom -- lseek to
 				  // end of file, tell, lseek back
 
+	static bool Removable(int sector);
+	static void MarkRemove(int sector, char *name);
+
 private:
+	static std::map<int, std::tuple<int, char *, Semaphore *>> sectorHash;
 	FileHeader *hdr;  // Header for this file
 	int seekPosition; // Current position within the file
 	int hdrSector;

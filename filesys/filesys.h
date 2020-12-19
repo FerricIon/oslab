@@ -84,7 +84,7 @@ public:
 
 	OpenFile *Open(char *name); // Open a file (UNIX open)
 
-	bool Remove(char *name); // Delete a file (UNIX unlink)
+	bool Remove(char *name, bool byOpenFile = 0); // Delete a file (UNIX unlink)
 
 	void List(); // List all the files in the file system
 

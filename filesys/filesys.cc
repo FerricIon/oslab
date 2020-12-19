@@ -277,7 +277,7 @@ FileSystem::Open(char *name)
 //	"name" -- the text name of the file to be removed
 //----------------------------------------------------------------------
 
-bool FileSystem::Remove(char *name)
+bool FileSystem::Remove(char *name, bool byOpenFile)
 {
     Directory *directory;
     BitMap *freeMap;
@@ -291,6 +291,12 @@ bool FileSystem::Remove(char *name)
     {
         delete directory;
         return FALSE; // file not found
+    }
+    if (!OpenFile::Removable(sector))
+    {
+        delete directory;
+        OpenFile::MarkRemove(sector, name);
+        return FALSE;
     }
     fileHdr = new FileHeader;
     fileHdr->FetchFrom(sector);
@@ -307,6 +313,9 @@ bool FileSystem::Remove(char *name)
     delete fileHdr;
     delete directory;
     delete freeMap;
+    // Name should have been copied when called by OpenFile
+    if (byOpenFile)
+        delete name;
     return TRUE;
 }
 

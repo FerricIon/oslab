@@ -19,6 +19,8 @@
 #include <strings.h>
 #endif
 
+std::map<int, std::tuple<int, char *, Semaphore *>> OpenFile::sectorHash;
+
 //----------------------------------------------------------------------
 // OpenFile::OpenFile
 // 	Open a Nachos file for reading and writing.  Bring the file header
@@ -33,6 +35,11 @@ OpenFile::OpenFile(int sector)
     hdrSector = sector;
     hdr->FetchFrom(sector);
     seekPosition = 0;
+
+    if (sectorHash.find(sector) == sectorHash.end())
+        sectorHash[sector] = {1, NULL, new Semaphore("OpenFile Semaphore", 1)};
+    else
+        std::get<0>(sectorHash[sector])++;
 }
 
 //----------------------------------------------------------------------
@@ -43,6 +50,14 @@ OpenFile::OpenFile(int sector)
 OpenFile::~OpenFile()
 {
     hdr->WriteBack(hdrSector);
+    std::get<0>(sectorHash[hdrSector])--;
+    if (!std::get<0>(sectorHash[hdrSector]))
+    {
+        delete std::get<2>(sectorHash[hdrSector]);
+        if (std::get<1>(sectorHash[hdrSector]))
+            fileSystem->Remove(std::get<1>(sectorHash[hdrSector]), 1);
+        sectorHash.erase(hdrSector);
+    }
     delete hdr;
 }
 
@@ -133,9 +148,11 @@ int OpenFile::ReadAt(char *into, int numBytes, int position)
 
     // read in all the full and partial sectors that we need
     buf = new char[numSectors * SectorSize];
+    std::get<2>(sectorHash[hdrSector])->P();
     for (i = firstSector; i <= lastSector; i++)
         synchDisk->ReadSector(hdr->ByteToSector(i * SectorSize),
                               &buf[(i - firstSector) * SectorSize]);
+    std::get<2>(sectorHash[hdrSector])->V();
 
     // copy the part we want
     bcopy(&buf[position - (firstSector * SectorSize)], into, numBytes);
@@ -178,6 +195,7 @@ int OpenFile::WriteAt(char *from, int numBytes, int position)
     firstAligned = (position == (firstSector * SectorSize));
     lastAligned = ((position + numBytes) == ((lastSector + 1) * SectorSize));
 
+    std::get<2>(sectorHash[hdrSector])->P();
     // read in first and last sector, if they are to be partially modified
     if (!firstAligned)
         ReadAt(buf, SectorSize, firstSector * SectorSize);
@@ -192,6 +210,7 @@ int OpenFile::WriteAt(char *from, int numBytes, int position)
     for (i = firstSector; i <= lastSector; i++)
         synchDisk->WriteSector(hdr->ByteToSector(i * SectorSize),
                                &buf[(i - firstSector) * SectorSize]);
+    std::get<2>(sectorHash[hdrSector])->V();
 
     hdr->UpdateLastModified();
     delete[] buf;
@@ -206,4 +225,16 @@ int OpenFile::WriteAt(char *from, int numBytes, int position)
 int OpenFile::Length()
 {
     return hdr->FileLength();
+}
+
+bool OpenFile::Removable(int sector)
+{
+    return sectorHash.find(sector) == sectorHash.end() ||
+           std::get<0>(sectorHash[sector]) == 0;
+}
+
+void OpenFile::MarkRemove(int sector, char *name)
+{
+    std::get<1>(sectorHash[sector]) = new char[strlen(name)];
+    strcpy(std::get<1>(sectorHash[sector]), name);
 }
