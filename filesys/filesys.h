@@ -92,6 +92,8 @@ public:
 
 	void Stat(char *name); // Print a file's attributes
 
+	void Mkfifo(char *name);
+
 	OpenFile *freeMapFile; // Bit map of free disk blocks,
 						   // represented as a file
 private:

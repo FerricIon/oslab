@@ -74,16 +74,69 @@ void OpenFile::Seek(int position)
 
 int OpenFile::Read(char *into, int numBytes)
 {
-    int result = ReadAt(into, numBytes, seekPosition);
-    seekPosition += result;
-    return result;
+    if (hdr->GetType() == 2)
+    {
+        int readPtr, writePtr;
+        ReadAt((char *)&readPtr, sizeof(int), 0);
+        ReadAt((char *)&writePtr, sizeof(int), sizeof(int));
+        int length = (writePtr - readPtr + SectorSize) % SectorSize;
+        ASSERT(numBytes <= length);
+        if (SectorSize - readPtr <= numBytes)
+        {
+            ReadAt(into, SectorSize - readPtr, SectorSize + readPtr);
+            ReadAt(into + SectorSize - readPtr, numBytes - SectorSize + readPtr,
+                   SectorSize);
+            readPtr = numBytes - SectorSize + readPtr;
+            WriteAt((char *)&readPtr, sizeof(int), 0);
+        }
+        else
+        {
+            ReadAt(into, numBytes, SectorSize + readPtr);
+            readPtr += numBytes;
+            WriteAt((char *)&readPtr, sizeof(int), 0);
+        }
+        return numBytes;
+    }
+    else
+    {
+        int result = ReadAt(into, numBytes, seekPosition);
+        seekPosition += result;
+        return result;
+    }
 }
 
 int OpenFile::Write(char *into, int numBytes)
 {
-    int result = WriteAt(into, numBytes, seekPosition);
-    seekPosition += result;
-    return result;
+    if (hdr->GetType() == 2)
+    {
+        int readPtr, writePtr;
+        ReadAt((char *)&readPtr, sizeof(int), 0);
+        ReadAt((char *)&writePtr, sizeof(int), sizeof(int));
+        int length = (writePtr - readPtr + SectorSize) % SectorSize;
+        ASSERT(numBytes <= SectorSize - length);
+        if (SectorSize - writePtr <= numBytes)
+        {
+            WriteAt(into, SectorSize - writePtr, SectorSize + writePtr);
+            WriteAt(into + SectorSize - writePtr,
+                    numBytes - SectorSize + writePtr,
+                    SectorSize);
+            writePtr = numBytes - SectorSize + writePtr;
+            WriteAt((char *)&writePtr, sizeof(int), sizeof(int));
+        }
+        else
+        {
+            WriteAt(into, numBytes, SectorSize + writePtr);
+            writePtr += numBytes;
+            WriteAt((char *)&writePtr, sizeof(int), sizeof(int));
+        }
+        return numBytes;
+    }
+    else
+    {
+        int result = WriteAt(into, numBytes, seekPosition);
+        seekPosition += result;
+        return result;
+    }
 }
 
 //----------------------------------------------------------------------

@@ -166,6 +166,34 @@ void ThreadTest5()
     fileSystem->Remove("Dynamic_File_Test");
 }
 
+void SimpleThread2(int)
+{
+    OpenFile *openFile = fileSystem->Open("pipe");
+    char s[100];
+    openFile->Read(s, 12);
+    printf("%s\n", s);
+    currentThread->Yield();
+    s[1] = '\0';
+    for (int i = 0; i < 4; i++)
+    {
+        openFile->Read(s, 1);
+        printf("%s\n", s);
+    }
+}
+void ThreadTest7()
+{
+    fileSystem->Mkfifo("pipe");
+    OpenFile *openFile = fileSystem->Open("pipe");
+    openFile->Write("Hello World", 12);
+
+    Thread *t = new Thread("forked thread");
+    t->Fork(SimpleThread2, 0);
+
+    currentThread->Yield();
+    openFile->Write("Lab5", 4);
+    currentThread->Yield();
+}
+
 void ThreadTest()
 {
     switch (testnum)
@@ -184,6 +212,9 @@ void ThreadTest()
     //     break;
     case 5:
         ThreadTest5();
+        break;
+    case 7:
+        ThreadTest7();
         break;
     default:
         printf("No test specified.\n");

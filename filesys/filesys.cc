@@ -390,3 +390,8 @@ void FileSystem::Stat(char *name)
     delete fileHdr;
     delete directory;
 }
+
+void FileSystem::Mkfifo(char *name)
+{
+    FileSystem::Create(name, SectorSize * 2, 2);
+}
