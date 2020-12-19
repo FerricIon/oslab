@@ -17,6 +17,8 @@
 #ifndef DIRECTORY_H
 #define DIRECTORY_H
 
+#include <vector>
+#include <string>
 #include "openfile.h"
 
 #define FileNameMaxLen 9 // for simplicity, we assume \
@@ -61,12 +63,12 @@ public:
   void WriteBack(OpenFile *file); // Write modifications to
                                   // directory contents back to disk
 
-  int Find(char *name); // Find the sector number of the
-                        // FileHeader for file: "name"
+  int Find(const char *name); // Find the sector number of the
+                              // FileHeader for file: "name"
 
   bool Add(char *name, int newSector); // Add a file name into the directory
 
-  bool Remove(char *name); // Remove a file from the directory
+  bool Remove(const char *name); // Remove a file from the directory
 
   void List();  // Print the names of all the files
                 //  in the directory
@@ -74,13 +76,16 @@ public:
                 //  of the directory -- all the file
                 //  names and their contents.
 
+  std::vector<std::string> EntryNames(); // Get filename for all entries.
+
 private:
   int tableSize;         // Number of directory entries
   DirectoryEntry *table; // Table of pairs:
                          // <file name, file header location>
 
-  int FindIndex(char *name); // Find the index into the directory
-                             //  table corresponding to "name"
+  int FindIndex(const char *name); // Find the index into the directory
+                                   //  table corresponding to "name"
+  std::string FullName(int index); // Returns the full name of a inUse entry
 };
 
 #endif // DIRECTORY_H

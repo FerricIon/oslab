@@ -51,6 +51,8 @@
 #include "filehdr.h"
 #include "filesys.h"
 
+#include <functional>
+
 // Sectors containing the file headers for the bitmap of free sectors,
 // and the directory of files.  These file headers are placed in well-known
 // sectors, so that they can be located on boot-up.
@@ -63,6 +65,48 @@
 #define FreeMapFileSize (NumSectors / BitsInByte)
 #define NumDirEntries 10
 #define DirectoryFileSize (sizeof(DirectoryEntry) * NumDirEntries)
+
+struct PsuedoDirectoryEntry
+{
+    std::string filename;
+    Directory *directory;
+};
+
+void Recurse(OpenFile *dirFile,
+             std::function<void(const PsuedoDirectoryEntry *)> common,
+             std::function<void(const PsuedoDirectoryEntry *)> beforeRecurse,
+             std::function<void(const PsuedoDirectoryEntry *)> recursed)
+{
+    Directory *directory = new Directory(NumDirEntries);
+    directory->FetchFrom(dirFile);
+
+    for (auto filename : directory->EntryNames())
+    {
+        PsuedoDirectoryEntry entry = {filename, directory};
+        FileHeader *hdr = new FileHeader;
+        int sector = directory->Find(filename.c_str());
+
+        hdr->FetchFrom(sector);
+        if (hdr->GetType() == 0)
+        {
+            if (common)
+                common(&entry);
+        }
+        else
+        {
+            if (beforeRecurse)
+                beforeRecurse(&entry);
+            OpenFile *openFile = new OpenFile(sector);
+            Recurse(openFile, common, beforeRecurse, recursed);
+            delete openFile;
+            if (recursed)
+                recursed(&entry);
+        }
+        delete hdr;
+    }
+
+    delete directory;
+}
 
 //----------------------------------------------------------------------
 // FileSystem::FileSystem
@@ -192,15 +236,20 @@ bool FileSystem::Create(char *name, int initialSize, int type)
     Directory *directory;
     BitMap *freeMap;
     FileHeader *hdr;
+    OpenFile *dirFile;
     int sector;
     bool success;
 
     DEBUG('f', "Creating file %s, size %d\n", name, initialSize);
 
+    int ptr;
+    dirFile = ParsePath(name, ptr);
+    if (dirFile == NULL)
+        return FALSE;
     directory = new Directory(NumDirEntries);
-    directory->FetchFrom(directoryFile);
+    directory->FetchFrom(dirFile);
 
-    if (directory->Find(name) != -1)
+    if (directory->Find(name + ptr) != -1)
         success = FALSE; // file is already in directory
     else
     {
@@ -209,7 +258,7 @@ bool FileSystem::Create(char *name, int initialSize, int type)
         sector = freeMap->Find(); // find a sector to hold the file header
         if (sector == -1)
             success = FALSE; // no free block for file header
-        else if (!directory->Add(name, sector))
+        else if (!directory->Add(name + ptr, sector))
             success = FALSE; // no space in directory
         else
         {
@@ -226,13 +275,15 @@ bool FileSystem::Create(char *name, int initialSize, int type)
                 hdr->UpdateLastModified();
                 // everthing worked, flush all changes back to disk
                 hdr->WriteBack(sector);
-                directory->WriteBack(directoryFile);
+                directory->WriteBack(dirFile);
                 freeMap->WriteBack(freeMapFile);
             }
             delete hdr;
         }
         delete freeMap;
     }
+    if (dirFile != directoryFile)
+        delete dirFile;
     delete directory;
     return success;
 }
@@ -250,15 +301,26 @@ bool FileSystem::Create(char *name, int initialSize, int type)
 OpenFile *
 FileSystem::Open(char *name)
 {
+    OpenFile *dirFile;
     Directory *directory = new Directory(NumDirEntries);
     OpenFile *openFile = NULL;
     int sector;
 
+    int ptr;
+    dirFile = ParsePath(name, ptr);
+    if (dirFile == NULL)
+    {
+        delete directory;
+        return NULL;
+    }
+
     DEBUG('f', "Opening file %s\n", name);
-    directory->FetchFrom(directoryFile);
-    sector = directory->Find(name);
+    directory->FetchFrom(dirFile);
+    sector = directory->Find(name + ptr);
     if (sector >= 0)
         openFile = new OpenFile(sector); // name was found in directory
+    if (dirFile != directoryFile)
+        delete dirFile;
     delete directory;
     return openFile; // return NULL if not found
 }
@@ -279,35 +341,66 @@ FileSystem::Open(char *name)
 
 bool FileSystem::Remove(char *name)
 {
+    OpenFile *dirFile;
     Directory *directory;
     BitMap *freeMap;
     FileHeader *fileHdr;
     int sector;
 
+    int ptr;
+    dirFile = ParsePath(name, ptr);
+    if (dirFile == NULL)
+        return NULL;
+
     directory = new Directory(NumDirEntries);
-    directory->FetchFrom(directoryFile);
-    sector = directory->Find(name);
+    directory->FetchFrom(dirFile);
+    sector = directory->Find(name + ptr);
     if (sector == -1)
     {
         delete directory;
         return FALSE; // file not found
     }
-    fileHdr = new FileHeader;
-    fileHdr->FetchFrom(sector);
 
     freeMap = new BitMap(NumSectors);
     freeMap->FetchFrom(freeMapFile);
 
-    fileHdr->Deallocate(freeMap); // remove data blocks
-    freeMap->Clear(sector);       // remove header block
-    directory->Remove(name);
+    auto removeFile = [freeMap](const PsuedoDirectoryEntry *entry) {
+        FileHeader *hdr = new FileHeader;
+        int sector = entry->directory->Find(entry->filename.c_str());
+        hdr->FetchFrom(sector);
+        hdr->Deallocate(freeMap);
+        freeMap->Clear(sector);
+        entry->directory->Remove(entry->filename.c_str());
+        delete hdr;
+    };
 
-    freeMap->WriteBack(freeMapFile);     // flush to disk
-    directory->WriteBack(directoryFile); // flush to disk
+    fileHdr = new FileHeader;
+    fileHdr->FetchFrom(sector);
+    PsuedoDirectoryEntry entry = {name + ptr, directory};
+
+    if (fileHdr->GetType() == 0)
+        removeFile(&entry);
+    else
+        Recurse(dirFile, removeFile, NULL, removeFile);
+
+    freeMap->WriteBack(freeMapFile); // flush to disk
+    directory->WriteBack(dirFile);   // flush to disk
     delete fileHdr;
+    if (dirFile != directoryFile)
+        delete dirFile;
     delete directory;
     delete freeMap;
     return TRUE;
+}
+
+//----------------------------------------------------------------------
+// FileSystem::Mkdir
+//  Wrapper for creating a directory file.
+//----------------------------------------------------------------------
+
+bool FileSystem::Mkdir(char *name)
+{
+    return Create(name, DirectoryFileSize, 1);
 }
 
 //----------------------------------------------------------------------
@@ -317,11 +410,20 @@ bool FileSystem::Remove(char *name)
 
 void FileSystem::List()
 {
-    Directory *directory = new Directory(NumDirEntries);
-
-    directory->FetchFrom(directoryFile);
-    directory->List();
-    delete directory;
+    printf("/\n");
+    int indent = 0;
+    Recurse(
+        directoryFile, [&indent](const PsuedoDirectoryEntry *entry) {
+        for (int i = 0; i < indent * 2; ++i)
+            printf("%c", ' ');
+        printf("|_%s\n", entry->filename.c_str()); },
+        [&indent](const PsuedoDirectoryEntry *entry) {
+            for (int i = 0; i < indent * 2; ++i)
+                printf("%c", ' ');
+            printf("|_%s\n", entry->filename.c_str());
+            indent++;
+        },
+        [&indent](const PsuedoDirectoryEntry *entry) { indent--; });
 }
 
 //----------------------------------------------------------------------
@@ -369,13 +471,22 @@ void FileSystem::Print()
 
 void FileSystem::Stat(char *name)
 {
+    OpenFile *dirFile;
     Directory *directory;
     FileHeader *fileHdr;
     int sector;
 
+    int ptr;
+    dirFile = ParsePath(name, ptr);
+    if (dirFile == NULL)
+    {
+        printf("No such file or directory.\n");
+        return;
+    }
+
     directory = new Directory(NumDirEntries);
-    directory->FetchFrom(directoryFile);
-    sector = directory->Find(name);
+    directory->FetchFrom(dirFile);
+    sector = directory->Find(name + ptr);
     if (sector == -1)
     {
         delete directory;
@@ -387,6 +498,64 @@ void FileSystem::Stat(char *name)
 
     fileHdr->Print(FALSE);
 
+    if (dirFile != directoryFile)
+        delete dirFile;
     delete fileHdr;
     delete directory;
+}
+
+//----------------------------------------------------------------------
+// FileSystem::ParsePath
+//  Parse a given path to some file from root folder.
+//  Returns the last folder containing the file.
+//  name + ptr marks the beginning of the real filename
+//----------------------------------------------------------------------
+
+OpenFile *FileSystem::ParsePath(char *name, int &ptr)
+{
+    if (name[0] != '/')
+    {
+        DEBUG('f', "Invalid path: %s\n", name);
+        return NULL;
+    }
+
+    ptr = 0;
+    OpenFile *dirFile = directoryFile;
+    FileHeader *hdr = new FileHeader;
+
+    while (name[ptr] != '\0')
+    {
+        int nextSlash = ++ptr;
+        while (name[nextSlash] != '/' && name[nextSlash] != '\0')
+            ++nextSlash;
+
+        // Parsed out the final filename
+        if (name[nextSlash] == '\0')
+            return dirFile;
+
+        Directory *diretory = new Directory(NumDirEntries);
+        diretory->FetchFrom(dirFile);
+        name[nextSlash] = '\0';
+        int sector = diretory->Find(name + ptr);
+        if (sector == -1)
+        {
+            DEBUG('f', "Directory not found: %s\n", name);
+            name[nextSlash] = '/';
+            return NULL;
+        }
+        hdr->FetchFrom(sector);
+        // ought to be a directory
+        if (hdr->GetType() != 1)
+        {
+            DEBUG('f', "Not a directory: %s\n", name);
+            name[nextSlash] = '/';
+            return NULL;
+        }
+        if (dirFile != directoryFile)
+            delete dirFile;
+        dirFile = new OpenFile(sector);
+
+        name[nextSlash] = '/';
+        ptr = nextSlash;
+    }
 }

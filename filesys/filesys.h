@@ -86,6 +86,8 @@ public:
 
 	bool Remove(char *name); // Delete a file (UNIX unlink)
 
+	bool Mkdir(char *name); // Create a directory (UNIX mkdir)
+
 	void List(); // List all the files in the file system
 
 	void Print(); // List all the files and their contents
@@ -97,6 +99,8 @@ private:
 							 // represented as a file
 	OpenFile *directoryFile; // "Root" directory -- list of
 							 // file names, represented as a file
+
+	OpenFile *ParsePath(char *name, int &ptr); // Parse out the deepest directory
 };
 
 #endif // FILESYS

@@ -123,6 +123,40 @@ void ThreadTest3()
     fileSystem->Remove("Big_File_Test");
 }
 
+void ThreadTest4()
+{
+    printf("*** mkdir /a\n");
+    fileSystem->Mkdir("/a");
+    printf("*** mkdir /a/b\n");
+    fileSystem->Mkdir("/a/b");
+    printf("*** create /a/hello\n");
+    fileSystem->Create("/a/hello", 10);
+    printf("*** write Hello! into /a/hello\n");
+    OpenFile *openFile = fileSystem->Open("/a/hello");
+    openFile->WriteAt("Hello!", 7, 0);
+    printf("*** read /a/hello\n");
+    char s[10];
+    openFile->ReadAt(s, 7, 0);
+    printf("  %s\n", s);
+    delete openFile;
+    printf("*** list\n");
+    fileSystem->List();
+    printf("*** create /a/b/a\n");
+    fileSystem->Create("/a/b/a", 10);
+    printf("*** create /a/b/b\n");
+    fileSystem->Create("/a/b/b", 10);
+    printf("*** mkdir /a/b/c\n");
+    fileSystem->Mkdir("/a/b/c");
+    printf("*** create /a/b/c/d\n");
+    fileSystem->Create("/a/b/c/d", 10);
+    printf("*** list\n");
+    fileSystem->List();
+    printf("*** remove /a/b\n");
+    fileSystem->Remove("/a/b");
+    printf("*** list\n");
+    fileSystem->List();
+}
+
 void ThreadTest()
 {
     switch (testnum)
@@ -136,9 +170,9 @@ void ThreadTest()
     case 3:
         ThreadTest3();
         break;
-    // case 4:
-    //     ThreadTest4();
-    //     break;
+    case 4:
+        ThreadTest4();
+        break;
     // case 5:
     //     ThreadTest5();
     //     break;

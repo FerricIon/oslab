@@ -88,32 +88,12 @@ void Directory::WriteBack(OpenFile *file)
 //	"name" -- the file name to look up
 //----------------------------------------------------------------------
 
-int Directory::FindIndex(char *name)
+int Directory::FindIndex(const char *name)
 {
     for (int i = 0; i < tableSize; i++)
-        if (table[i].inUse)
-        {
-            int index = i, match = TRUE;
-            int compared = 0;
-            while (match)
-            {
-                if (strncmp(table[index].name, name + compared,
-                            FileNameMaxLen) == 0)
-                {
-                    if (table[index].next == -1)
-                        break;
-                    else
-                    {
-                        compared += FileNameMaxLen;
-                        index = table[index].next;
-                    }
-                }
-                else
-                    match = FALSE;
-            }
-            if (match)
-                return i;
-        }
+        if (table[i].inUse && FullName(i) == name)
+            return i;
+
     return -1; // name not in directory
 }
 
@@ -126,7 +106,7 @@ int Directory::FindIndex(char *name)
 //	"name" -- the file name to look up
 //----------------------------------------------------------------------
 
-int Directory::Find(char *name)
+int Directory::Find(const char *name)
 {
     int i = FindIndex(name);
 
@@ -156,6 +136,8 @@ bool Directory::Add(char *name, int newSector)
     for (int i = 0; i < tableSize; i++)
         if (!table[i].inUse && table[i].sector != -1)
         {
+            // Though we have FullName() now \
+            // we still need to add entries manually
             if (copied == 0)
             {
                 table[i].inUse = TRUE;
@@ -187,12 +169,15 @@ bool Directory::Add(char *name, int newSector)
 //	"name" -- the file name to be removed
 //----------------------------------------------------------------------
 
-bool Directory::Remove(char *name)
+bool Directory::Remove(const char *name)
 {
     int i = FindIndex(name);
 
     if (i == -1)
         return FALSE; // name not in directory
+
+    // Though we have FullName() now \
+    // we still need to add entries manually
     table[i].inUse = FALSE;
     for (int index = i; index != -1; index = table[index].next)
         table[index].sector = 0;
@@ -208,11 +193,7 @@ void Directory::List()
 {
     for (int i = 0; i < tableSize; i++)
         if (table[i].inUse)
-        {
-            for (int index = i; index != -1; index = table[index].next)
-                printf("%s", table[index].name);
-            printf("\n");
-        }
+            printf("%s\n", FullName(i).c_str());
 }
 
 //----------------------------------------------------------------------
@@ -229,13 +210,32 @@ void Directory::Print()
     for (int i = 0; i < tableSize; i++)
         if (table[i].inUse)
         {
-            printf("Name: ");
-            for (int index = i; index != -1; index = table[index].next)
-                printf("%s", table[index].name);
+            printf("Name: %s", FullName(i).c_str());
             printf(", Sector: %d\n", table[i].sector);
             hdr->FetchFrom(table[i].sector);
             hdr->Print();
         }
     printf("\n");
     delete hdr;
+}
+
+std::vector<std::string> Directory::EntryNames()
+{
+    std::vector<std::string> names;
+    std::string filename;
+
+    for (int i = 0; i < tableSize; i++)
+        if (table[i].inUse)
+            names.push_back(FullName(i));
+
+    return names;
+}
+
+std::string Directory::FullName(int index)
+{
+    ASSERT(table[index].inUse);
+    std::string filename;
+    for (int i = index; i != -1; i = table[i].next)
+        filename += table[i].name;
+    return filename;
 }
