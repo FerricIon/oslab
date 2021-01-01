@@ -15,6 +15,7 @@
 #include "thread.h"
 #include "timer.h"
 #include "utility.h"
+#include <vector>
 
 // Initialization and cleanup routines
 extern void Initialize(int argc, char **argv); // Initialization,
@@ -28,10 +29,20 @@ extern Scheduler *scheduler;        // the ready list
 extern Interrupt *interrupt;        // interrupt status
 extern Statistics *stats;           // performance metrics
 extern Timer *timer;                // the hardware alarm clock
+struct SpaceTableEntry {
+  AddrSpace *space;
+  int id;
+  int joinCount;
+  int refCount;
+};
+extern std::vector<SpaceTableEntry> spaceTable;
+extern int nextSpaceId;
 
 #ifdef USER_PROGRAM
+#include "allocator.h"
 #include "machine.h"
-extern Machine *machine; // user program memory and registers
+extern Machine *machine;         // user program memory and registers
+extern PageAllocator *allocator; // Handle page allocation
 #endif
 
 #ifdef FILESYS_NEEDED // FILESYS or FILESYS_STUB

@@ -7,6 +7,7 @@
 
 #include "system.h"
 #include "copyright.h"
+#include <vector>
 
 // This defines *all* of the global data structures used by Nachos.
 // These are all initialized and de-allocated by this file.
@@ -18,6 +19,8 @@ Interrupt *interrupt;        // interrupt status
 Statistics *stats;           // performance metrics
 Timer *timer;                // the hardware timer device,
                              // for invoking context switches
+std::vector<SpaceTableEntry> spaceTable;
+int nextSpaceId;
 
 #ifdef FILESYS_NEEDED
 FileSystem *fileSystem;
@@ -28,8 +31,9 @@ OpenFile *tableOpenFile[128] = {};
 SynchDisk *synchDisk;
 #endif
 
-#ifdef USER_PROGRAM // requires either FILESYS or FILESYS_STUB
-Machine *machine;   // user program memory and registers
+#ifdef USER_PROGRAM       // requires either FILESYS or FILESYS_STUB
+Machine *machine;         // user program memory and registers
+PageAllocator *allocator; // Handle page allocation
 #endif
 
 #ifdef NETWORK
@@ -59,6 +63,9 @@ extern void Cleanup();
 static void TimerInterruptHandler(int dummy) {
   if (interrupt->getStatus() != IdleMode)
     interrupt->YieldOnReturn();
+#ifdef USER_PROGRAM
+  currentThread->space->UpdateTlbCounter();
+#endif
 }
 
 //----------------------------------------------------------------------

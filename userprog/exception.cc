@@ -76,6 +76,21 @@ void SyscallIncPC() {
   machine->registers[NextPCReg] = pcAfter;
 }
 
+void ExecHandler(int dummy) {
+  currentThread->space->InitRegisters();
+  currentThread->space->RestoreState();
+  machine->Run();
+}
+
+void ForkHandler(int function) {
+  currentThread->space->InitRegisters();
+  currentThread->space->RestoreState();
+  machine->WriteRegister(PrevPCReg, 0);
+  machine->WriteRegister(PCReg, function);
+  machine->WriteRegister(NextPCReg, function + 4);
+  machine->Run();
+}
+
 //----------------------------------------------------------------------
 // ExceptionHandler
 // 	Entry point into the Nachos kernel.  Called when a user program
@@ -165,13 +180,85 @@ void ExceptionHandler(ExceptionType which) {
       PutUserString((char *)machine->ReadRegister(4), buffer, read, 0);
       break;
     }
+    case SC_Exec: {
+      char name[32];
+      FetchUserString(name, (char *)machine->ReadRegister(4), 32);
+      OpenFile *executable = fileSystem->Open(name);
+      ASSERT(executable);
+
+      Thread *t = new Thread("exec thread");
+      t->space = new AddrSpace(executable);
+      spaceTable.push_back({t->space, nextSpaceId++, 0, 1});
+      delete executable;
+      t->Fork(ExecHandler, 0);
+      machine->WriteRegister(2, t->space->spaceId);
+      break;
+    }
+    case SC_Fork: {
+      Thread *t = new Thread("fork thread");
+      t->space = currentThread->space;
+      t->Fork(ForkHandler, (void *)machine->ReadRegister(4));
+      break;
+    }
+    case SC_Yield: {
+      currentThread->Yield();
+      break;
+    }
+    case SC_Join: {
+      int spaceId = machine->ReadRegister(4);
+      while (true) {
+        int found = false;
+        for (auto space : *spaceList)
+          if (spaceId == space->spaceId) {
+            found = true;
+            break;
+          }
+        if (!found)
+          break;
+        else
+          currentThread->Yield();
+      }
+      break;
+    }
     default:
       printf("Unexpected syscall code %d\n", type);
       ASSERT(FALSE);
       break;
     }
-    SyscallIncPC();
-  } else {
+  }
+#ifdef USE_TLB
+  else if (which == PageFaultException) {
+    DEBUG('a', "Page fault, badVAddr: %d.\n", machine->registers[BadVAddrReg]);
+    static int pagefaultCounter;
+    printf("PageFault #%d, bad virtual addr: 0x%x\n", ++pagefaultCounter,
+           machine->registers[BadVAddrReg]);
+
+    unsigned int virtAddr = machine->registers[BadVAddrReg];
+    unsigned int vpn = (unsigned)virtAddr / PageSize;
+
+    unsigned int index = 0;
+
+#ifdef TLB_FIFO
+    static int lastIndex = TLBSize - 1;
+    lastIndex = index = (lastIndex + 1) % TLBSize;
+#elif defined(TLB_AGING)
+    index = currentThread->space->TlbIndex();
+#else
+    ASSERT(FALSE);
+#endif
+
+    // Set the dirty bit as well
+    TranslationEntry *entry =
+        currentThread->space->LookupPageTable(vpn, &machine->tlb[index]);
+    if (entry) {
+      machine->tlb[index] = *entry;
+    } else {
+      printf("Unexpected virtual address 0x%x\n", virtAddr);
+      ASSERT(FALSE);
+    }
+  }
+#endif
+  else {
     printf("Unexpected user mode exception %d %d\n", which, type);
     ASSERT(FALSE);
   }
