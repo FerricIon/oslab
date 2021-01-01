@@ -109,6 +109,12 @@ void ExceptionHandler(ExceptionType which) {
       interrupt->Halt();
       break;
     }
+    case SC_Exit: {
+      printf("%s exit with code %d.\n", currentThread->getName(),
+             machine->ReadRegister(4));
+      currentThread->Finish();
+      break;
+    }
     case SC_Create: {
       char name[32];
       FetchUserString(name, (char *)machine->ReadRegister(4), 32);
