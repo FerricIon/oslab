@@ -21,6 +21,7 @@ Timer *timer;                // the hardware timer device,
 
 #ifdef FILESYS_NEEDED
 FileSystem *fileSystem;
+OpenFile *tableOpenFile[128] = {};
 #endif
 
 #ifdef FILESYS

@@ -37,6 +37,7 @@ extern Machine *machine; // user program memory and registers
 #ifdef FILESYS_NEEDED // FILESYS or FILESYS_STUB
 #include "filesys.h"
 extern FileSystem *fileSystem;
+extern OpenFile *tableOpenFile[];
 #endif
 
 #ifdef FILESYS
