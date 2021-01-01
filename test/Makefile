@@ -35,7 +35,7 @@ CPP = gcc -m32 -E
 INCDIR =-I../userprog -I../threads
 CFLAGS = -G 0 -c $(INCDIR)
 
-all: halt shell matmult sort syscall_1
+all: halt shell matmult sort syscall_1 exec fork forkthread join joinfork
 
 start.o: start.s ../userprog/syscall.h
 	$(CPP) $(CPPFLAGS) start.c > strt.s
@@ -71,3 +71,33 @@ syscall_1.o: syscall_1.c
 syscall_1: syscall_1.o start.o
 	$(LD) $(LDFLAGS) start.o syscall_1.o -o syscall_1.coff
 	../bin/coff2noff syscall_1.coff syscall_1
+
+exec.o: exec.c
+	$(CC) $(CFLAGS) -c exec.c
+exec: exec.o start.o
+	$(LD) $(LDFLAGS) start.o exec.o -o exec.coff
+	../bin/coff2noff exec.coff exec
+
+fork.o: fork.c
+	$(CC) $(CFLAGS) -c fork.c
+fork: fork.o start.o
+	$(LD) $(LDFLAGS) start.o fork.o -o fork.coff
+	../bin/coff2noff fork.coff fork
+
+forkthread.o: forkthread.c
+	$(CC) $(CFLAGS) -c forkthread.c
+forkthread: forkthread.o start.o
+	$(LD) $(LDFLAGS) start.o forkthread.o -o forkthread.coff
+	../bin/coff2noff forkthread.coff forkthread
+
+join.o: join.c
+	$(CC) $(CFLAGS) -c join.c
+join: join.o start.o
+	$(LD) $(LDFLAGS) start.o join.o -o join.coff
+	../bin/coff2noff join.coff join
+
+joinfork.o: joinfork.c
+	$(CC) $(CFLAGS) -c joinfork.c
+joinfork: joinfork.o start.o
+	$(LD) $(LDFLAGS) start.o joinfork.o -o joinfork.coff
+	../bin/coff2noff joinfork.coff joinfork
