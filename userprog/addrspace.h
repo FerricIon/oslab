@@ -21,6 +21,7 @@
 
 class AddrSpace {
 public:
+  AddrSpace(AddrSpace *parentSpace);
   AddrSpace(OpenFile *executable); // Create an address space,
                                    // initializing it with the program
                                    // stored in the file "executable"
@@ -38,7 +39,11 @@ public:
                                                  // thread saving page table
   void UpdateTlbCounter(); // Called when handling a TimerInt
   int TlbIndex();          // Get the index with minimal
-                           // counter value and set to 0xFF
+  // counter value and set to 0xFF
+  int spaceId;
+  void ReallocateStack();
+  void FreeSharedPages();
+  void ForkCopy(AddrSpace *parentSpace);
 
 private:
   TranslationEntry *tlb;

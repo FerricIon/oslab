@@ -30,6 +30,9 @@ void StartProcess(char *filename) {
   }
   space = new AddrSpace(executable);
   currentThread->space = space;
+  currentThread->space->spaceId = nextSpaceId++;
+  spaceTable.push_back(
+      {0, currentThread->space->spaceId, 0, 1, currentThread->space});
 
   delete executable; // close file
 

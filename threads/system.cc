@@ -151,6 +151,7 @@ void Initialize(int argc, char **argv) {
 
 #ifdef USER_PROGRAM
   machine = new Machine(debugUserProg); // this must come first
+  allocator = new PageAllocator();
 #endif
 
 #ifdef FILESYS
@@ -178,6 +179,7 @@ void Cleanup() {
 
 #ifdef USER_PROGRAM
   delete machine;
+  delete allocator;
 #endif
 
 #ifdef FILESYS_NEEDED

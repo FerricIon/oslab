@@ -30,10 +30,11 @@ extern Interrupt *interrupt;        // interrupt status
 extern Statistics *stats;           // performance metrics
 extern Timer *timer;                // the hardware alarm clock
 struct SpaceTableEntry {
-  AddrSpace *space;
+  int status;
   int id;
   int joinCount;
   int refCount;
+  AddrSpace *space;
 };
 extern std::vector<SpaceTableEntry> spaceTable;
 extern int nextSpaceId;

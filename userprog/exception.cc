@@ -39,7 +39,8 @@
 
 void FetchUserString(char *dst, const char *src, int n, int delimiter = 1) {
   for (int i = 0; i < n; ++i) {
-    machine->ReadMem((int)(src + i), 1, (int *)(dst + i));
+    while (!machine->ReadMem((int)(src + i), 1, (int *)(dst + i)))
+      ;
     if (delimiter && dst[i] == '\0')
       break;
   }
@@ -61,12 +62,14 @@ void FetchUserString(char *dst, const char *src, int n, int delimiter = 1) {
 
 void PutUserString(char *dst, const char *src, int n, int delimiter = 1) {
   for (int i = 0; i < n; ++i) {
-    machine->WriteMem((int)(dst + i), 1, src[i]);
+    while (!machine->WriteMem((int)(dst + i), 1, src[i]))
+      ;
     if (delimiter && src[i] == '\0')
       break;
   }
   if (delimiter)
-    machine->WriteMem((int)(dst + n - 1), 1, '\0');
+    while (!machine->WriteMem((int)(dst + n - 1), 1, '\0'))
+      ;
 }
 
 void SyscallIncPC() {
@@ -127,6 +130,14 @@ void ExceptionHandler(ExceptionType which) {
     case SC_Exit: {
       printf("%s exit with code %d.\n", currentThread->getName(),
              machine->ReadRegister(4));
+      for (auto &entry : spaceTable)
+        if (entry.id == currentThread->space->spaceId) {
+          --entry.refCount;
+          entry.status = machine->ReadRegister(4);
+          if (!entry.refCount)
+            entry.space->FreeSharedPages();
+          break;
+        }
       currentThread->Finish();
       break;
     }
@@ -188,7 +199,8 @@ void ExceptionHandler(ExceptionType which) {
 
       Thread *t = new Thread("exec thread");
       t->space = new AddrSpace(executable);
-      spaceTable.push_back({t->space, nextSpaceId++, 0, 1});
+      t->space->spaceId = nextSpaceId++;
+      spaceTable.push_back({0, t->space->spaceId, 0, 1, t->space});
       delete executable;
       t->Fork(ExecHandler, 0);
       machine->WriteRegister(2, t->space->spaceId);
@@ -196,27 +208,47 @@ void ExceptionHandler(ExceptionType which) {
     }
     case SC_Fork: {
       Thread *t = new Thread("fork thread");
-      t->space = currentThread->space;
+      t->space = new AddrSpace(currentThread->space);
+      for (auto &entry : spaceTable)
+        if (t->space->spaceId == entry.id) {
+          ++entry.refCount;
+          break;
+        }
       t->Fork(ForkHandler, (void *)machine->ReadRegister(4));
       break;
     }
     case SC_Yield: {
       currentThread->Yield();
+      printf("%s yields\n", currentThread->getName());
       break;
     }
     case SC_Join: {
-      int spaceId = machine->ReadRegister(4);
-      while (true) {
-        int found = false;
-        for (auto space : *spaceList)
-          if (spaceId == space->spaceId) {
-            found = true;
+      int id = machine->ReadRegister(4);
+      bool found = false;
+      for (auto &entry : spaceTable)
+        if (id == entry.id) {
+          ++entry.joinCount;
+          found = true;
+          break;
+        }
+      ASSERT(found);
+      bool block = true;
+      while (block) {
+        for (int i = 0; i < spaceTable.size(); ++i)
+          if (id == spaceTable[i].id) {
+            auto &entry = spaceTable[i];
+            if (entry.refCount)
+              currentThread->Yield();
+            else {
+              entry.joinCount--;
+              machine->WriteRegister(2, entry.status);
+              if (!entry.joinCount) {
+                spaceTable.erase(spaceTable.begin() + i);
+              }
+              block = false;
+            }
             break;
           }
-        if (!found)
-          break;
-        else
-          currentThread->Yield();
       }
       break;
     }
@@ -225,6 +257,7 @@ void ExceptionHandler(ExceptionType which) {
       ASSERT(FALSE);
       break;
     }
+    SyscallIncPC();
   }
 #ifdef USE_TLB
   else if (which == PageFaultException) {

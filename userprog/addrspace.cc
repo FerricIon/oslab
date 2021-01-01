@@ -43,6 +43,23 @@ static void SwapHeader(NoffHeader *noffH) {
   noffH->uninitData.inFileAddr = WordToHost(noffH->uninitData.inFileAddr);
 }
 
+AddrSpace::AddrSpace(AddrSpace *parentSpace) {
+  numPages = parentSpace->numPages;
+  spaceId = parentSpace->spaceId;
+  pageTable = new TranslationEntry[numPages];
+  for (int i = 0; i < numPages; ++i)
+    pageTable[i] = parentSpace->pageTable[i];
+  ReallocateStack();
+#ifdef USE_TLB
+  tlb = new TranslationEntry[TLBSize];
+  tlbCounter = new unsigned char[TLBSize];
+  for (int i = 0; i < TLBSize; ++i) {
+    tlb[i].valid = FALSE;
+    tlbCounter[i] = 0;
+  }
+#endif
+}
+
 //----------------------------------------------------------------------
 // AddrSpace::AddrSpace
 // 	Create an address space to run a user program.
@@ -131,10 +148,11 @@ AddrSpace::AddrSpace(OpenFile *executable) {
 //----------------------------------------------------------------------
 
 AddrSpace::~AddrSpace() {
-  for (int i = 0; i < numPages; ++i) {
+  // Free user stack only.
+  for (int i = numPages - UserStackSize / PageSize; i < numPages; ++i) {
     allocator->FreePage(pageTable[i].physicalPage);
   }
-  delete pageTable;
+  delete[] pageTable;
 }
 
 //----------------------------------------------------------------------
@@ -257,11 +275,26 @@ void AddrSpace::ManualReadTranslation(OpenFile *executable, int virtAddr,
     int vpn = virtAddr / PageSize;
     int ppn = pageTable[vpn].physicalPage;
     int offset = virtAddr - vpn * PageSize;
-    lengthToRead = min(size, PageSize - offset);
+    lengthToRead = std::min(size, PageSize - offset);
     executable->ReadAt(&(machine->mainMemory[ppn * PageSize + offset]),
                        lengthToRead, fileAddr);
     virtAddr += lengthToRead;
     size -= lengthToRead;
     fileAddr += lengthToRead;
   }
+}
+
+void AddrSpace::ReallocateStack() {
+  for (int i = numPages - UserStackSize / PageSize; i < numPages; ++i) {
+    pageTable[i].physicalPage = allocator->AllocPage();
+    pageTable[i].valid = TRUE;
+    pageTable[i].use = FALSE;
+    pageTable[i].dirty = FALSE;
+    pageTable[i].readOnly = FALSE;
+    bzero(&machine->mainMemory[pageTable[i].physicalPage * PageSize], PageSize);
+  }
+}
+void AddrSpace::FreeSharedPages() {
+  for (int i = 0; i < numPages - UserStackSize / PageSize; ++i)
+    allocator->FreePage(pageTable[i].physicalPage);
 }
